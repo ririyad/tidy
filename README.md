@@ -18,29 +18,47 @@ npm install
 npm run tauri dev
 ```
 
-CLI vault tools:
+CLI:
 
 ```bash
+# Create a vault
 cargo run -p tidy-cli -- init ~/Tidy
+
+# Enumerate posts under a prefix
+cargo run -p tidy-cli -- discover https://example.com/blog --limit 20
+
+# Fetch, extract, and write Obsidian-friendly markdown
+cargo run -p tidy-cli -- fetch https://example.com/blog --vault ~/Tidy --limit 5
 ```
 
 ## Workspace layout
 
 ```
-crates/tidy-core/   # vault, migrations, (later) fetch/extract/index
+crates/tidy-core/   # discovery, extraction, vault writer, SQLite index
 crates/tidy-cli/    # headless harness for the engine
 src-tauri/          # thin Tauri commands + window
 src/                # Svelte UI
 docs/SPEC.md        # vault + frontmatter contracts
 ```
 
-## Status
+## Milestones
 
-Milestone **M1** — discovery engine. Use:
+| Milestone | Status | What landed |
+| --- | --- | --- |
+| **M0** Scaffold | Done | Tauri + SvelteKit shell, vault init, SQLite schema, contracts |
+| **M1** Discovery | Done | Polite HTTP client, robots/feeds/sitemaps, crawl fallback, `tidy discover` |
+| **M2** Extraction | Done | Readability → markdown, images, atomic vault writes, change detection, `tidy fetch` |
+| **M3** Reader UI | Next | Information Feed timeline, reader chrome, keyboard nav, read/star/archive |
+| **M4** Scheduler | Planned | Per-source intervals, launch catch-up, run history |
+| **M5** Search | Planned | FTS5 search, tags, smart views |
+| **M6** Highlights | Planned | Anchored highlights + notes |
+| **M7** Polish | Planned | Onboarding, overrides, packaging |
 
-```bash
-cargo run -p tidy-cli -- discover https://example.com/blog --limit 20
-```
+### Current: M2
 
-Order: feed → sitemap → HTML crawl fallback. Fetching and markdown extraction
-follow in M2. See `docs/SPEC.md`.
+`tidy fetch` discovers posts under a URL prefix, extracts readable content with
+`dom_smoothie`, converts to Markdown (`htmd`), downloads images into
+`attachments/`, writes Obsidian-compatible files with YAML frontmatter, and
+upserts the SQLite index. Re-running is idempotent via `content_hash`.
+
+See `docs/SPEC.md` for the vault and frontmatter contract.

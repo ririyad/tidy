@@ -1,7 +1,9 @@
 use std::{env, path::PathBuf, process};
 
 use anyhow::{bail, Context, Result};
-use tidy_core::{discover, parse_prefix, CrawlLimits, DiscoverOptions, Vault};
+use tidy_core::{
+    discover, fetch, parse_prefix, CrawlLimits, DiscoverOptions, FetchOptions, Vault,
+};
 
 #[tokio::main]
 async fn main() {
@@ -69,9 +71,11 @@ async fn run() -> Result<()> {
             .context("discovery failed")?;
 
             if json {
-                let payload = serde_json::to_string_pretty(&report)
-                    .context("failed to serialize report")?;
-                println!("{payload}");
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report)
+                        .context("failed to serialize report")?
+                );
             } else {
                 println!("prefix:          {}", report.prefix);
                 println!("primary source:  {:?}", report.primary_source);
@@ -111,13 +115,90 @@ async fn run() -> Result<()> {
             }
             Ok(())
         }
+        "fetch" => {
+            let prefix_arg = args.next().context(
+                "usage: tidy fetch <url-prefix> --vault PATH [--limit N] [--no-images] [--json]",
+            )?;
+
+            let mut vault = None;
+            let mut limit = None;
+            let mut download_images = true;
+            let mut json = false;
+
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--vault" => {
+                        let value = args.next().context("--vault requires a path")?;
+                        vault = Some(PathBuf::from(value));
+                    }
+                    "--limit" => {
+                        let value = args.next().context("--limit requires a number")?;
+                        limit = Some(value.parse::<usize>().context("invalid --limit")?);
+                    }
+                    "--no-images" => download_images = false,
+                    "--json" => json = true,
+                    other => bail!("unknown flag `{other}`"),
+                }
+            }
+
+            let vault = vault.context("--vault is required")?;
+            let prefix = parse_prefix(&prefix_arg)
+                .with_context(|| format!("invalid prefix `{prefix_arg}`"))?;
+
+            let report = fetch(FetchOptions {
+                url_prefix: prefix,
+                vault,
+                limit,
+                download_images,
+            })
+            .await
+            .context("fetch failed")?;
+
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report)
+                        .context("failed to serialize report")?
+                );
+            } else {
+                println!("source:       {}", report.source_slug);
+                println!("discovered:   {}", report.discovered);
+                println!(
+                    "added/updated/skipped/failed: {}/{}/{}/{}",
+                    report.added, report.updated, report.skipped, report.failed
+                );
+                if report.needs_review > 0 {
+                    println!("needs review: {}", report.needs_review);
+                }
+                println!();
+                for (index, item) in report.articles.iter().enumerate() {
+                    println!(
+                        "{:>4}. [{:?}] {} ({})\n      {}",
+                        index + 1,
+                        item.status,
+                        item.title,
+                        item.quality,
+                        item.path
+                    );
+                }
+                if !report.warnings.is_empty() {
+                    println!();
+                    println!("warnings:");
+                    for warning in report.warnings.iter().take(20) {
+                        println!("  - {warning}");
+                    }
+                    if report.warnings.len() > 20 {
+                        println!("  … {} more", report.warnings.len() - 20);
+                    }
+                }
+            }
+            Ok(())
+        }
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
         }
-        other => {
-            bail!("unknown command `{other}`\n\n{}", HELP);
-        }
+        other => bail!("unknown command `{other}`\n\n{HELP}"),
     }
 }
 
@@ -137,7 +218,13 @@ COMMANDS:
         --limit N               Cap the number of printed URLs
         --cache DIR             HTTP cache directory
         --json                  Emit machine-readable JSON
+    fetch <URL-PREFIX>          Discover, extract, and save articles
+        --vault PATH            Vault directory (required)
+        --limit N               Cap articles fetched
+        --no-images             Skip downloading images
+        --json                  Emit machine-readable JSON
     help                        Show this help
 
 Discovery order: feed → sitemap → HTML crawl fallback.
+Extraction: readability → markdown + frontmatter → SQLite index.
 ";
