@@ -22,10 +22,26 @@ pub struct SourceRow {
     pub title: String,
     pub feed_url: Option<String>,
     pub backfill_policy: String,
+    pub interval_minutes: i64,
     pub last_fetch_at: Option<String>,
     pub enabled: bool,
     pub article_count: i64,
     pub unread_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct FetchRunRow {
+    pub id: i64,
+    pub source_id: i64,
+    pub source_title: String,
+    pub started_at: String,
+    pub finished_at: Option<String>,
+    pub status: String,
+    pub discovered: i64,
+    pub added: i64,
+    pub updated: i64,
+    pub skipped: i64,
+    pub failed: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -135,9 +151,7 @@ impl Index {
                 title = excluded.title,
                 feed_url = COALESCE(excluded.feed_url, sources.feed_url),
                 discovery_mode = excluded.discovery_mode,
-                interval_minutes = excluded.interval_minutes,
-                backfill_policy = excluded.backfill_policy,
-                enabled = excluded.enabled
+                backfill_policy = excluded.backfill_policy
             "#,
             params![
                 source.url_prefix,
@@ -164,7 +178,7 @@ impl Index {
             r#"
             SELECT
                 s.id, s.url_prefix, s.title, s.feed_url, s.backfill_policy,
-                s.last_fetch_at, s.enabled,
+                s.interval_minutes, s.last_fetch_at, s.enabled,
                 COALESCE((SELECT count(*) FROM articles a WHERE a.source_id = s.id), 0),
                 COALESCE((
                     SELECT count(*) FROM articles a
@@ -174,19 +188,7 @@ impl Index {
             ORDER BY s.title COLLATE NOCASE ASC
             "#,
         )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(SourceRow {
-                id: row.get(0)?,
-                url_prefix: row.get(1)?,
-                title: row.get(2)?,
-                feed_url: row.get(3)?,
-                backfill_policy: row.get(4)?,
-                last_fetch_at: row.get(5)?,
-                enabled: row.get::<_, i64>(6)? != 0,
-                article_count: row.get(7)?,
-                unread_count: row.get(8)?,
-            })
-        })?;
+        let rows = stmt.query_map([], map_source_row)?;
         let mut out = Vec::new();
         for row in rows {
             out.push(row?);
@@ -201,7 +203,7 @@ impl Index {
                 r#"
                 SELECT
                     s.id, s.url_prefix, s.title, s.feed_url, s.backfill_policy,
-                    s.last_fetch_at, s.enabled,
+                    s.interval_minutes, s.last_fetch_at, s.enabled,
                     COALESCE((SELECT count(*) FROM articles a WHERE a.source_id = s.id), 0),
                     COALESCE((
                         SELECT count(*) FROM articles a
@@ -211,22 +213,79 @@ impl Index {
                 WHERE s.id = ?1
                 "#,
                 params![id],
-                |row| {
-                    Ok(SourceRow {
-                        id: row.get(0)?,
-                        url_prefix: row.get(1)?,
-                        title: row.get(2)?,
-                        feed_url: row.get(3)?,
-                        backfill_policy: row.get(4)?,
-                        last_fetch_at: row.get(5)?,
-                        enabled: row.get::<_, i64>(6)? != 0,
-                        article_count: row.get(7)?,
-                        unread_count: row.get(8)?,
-                    })
-                },
+                map_source_row,
             )
             .optional()?;
         Ok(row)
+    }
+
+    pub fn update_source_schedule(
+        &self,
+        source_id: i64,
+        interval_minutes: Option<i64>,
+        enabled: Option<bool>,
+    ) -> Result<Option<SourceRow>> {
+        if interval_minutes.is_none() && enabled.is_none() {
+            return self.get_source(source_id);
+        }
+        if let Some(minutes) = interval_minutes {
+            let minutes = minutes.max(1);
+            self.conn.execute(
+                "UPDATE sources SET interval_minutes = ?1 WHERE id = ?2",
+                params![minutes, source_id],
+            )?;
+        }
+        if let Some(enabled) = enabled {
+            self.conn.execute(
+                "UPDATE sources SET enabled = ?1 WHERE id = ?2",
+                params![enabled as i64, source_id],
+            )?;
+        }
+        self.get_source(source_id)
+    }
+
+    pub fn list_fetch_runs(
+        &self,
+        source_id: Option<i64>,
+        limit: i64,
+    ) -> Result<Vec<FetchRunRow>> {
+        let limit = limit.clamp(1, 200);
+        let mut out = Vec::new();
+        if let Some(source_id) = source_id {
+            let mut stmt = self.conn.prepare(
+                r#"
+                SELECT
+                    r.id, r.source_id, s.title, r.started_at, r.finished_at, r.status,
+                    r.discovered, r.added, r.updated, r.skipped, r.failed
+                FROM fetch_runs r
+                JOIN sources s ON s.id = r.source_id
+                WHERE r.source_id = ?1
+                ORDER BY r.started_at DESC
+                LIMIT ?2
+                "#,
+            )?;
+            let rows = stmt.query_map(params![source_id, limit], map_fetch_run_row)?;
+            for row in rows {
+                out.push(row?);
+            }
+        } else {
+            let mut stmt = self.conn.prepare(
+                r#"
+                SELECT
+                    r.id, r.source_id, s.title, r.started_at, r.finished_at, r.status,
+                    r.discovered, r.added, r.updated, r.skipped, r.failed
+                FROM fetch_runs r
+                JOIN sources s ON s.id = r.source_id
+                ORDER BY r.started_at DESC
+                LIMIT ?1
+                "#,
+            )?;
+            let rows = stmt.query_map(params![limit], map_fetch_run_row)?;
+            for row in rows {
+                out.push(row?);
+            }
+        }
+        Ok(out)
     }
 
     pub fn delete_source(&self, id: i64) -> Result<bool> {
@@ -564,4 +623,35 @@ impl Index {
 
 fn reading_time(word_count: i64) -> u32 {
     ((word_count as f64) / 200.0).ceil().max(1.0) as u32
+}
+
+fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRow> {
+    Ok(SourceRow {
+        id: row.get(0)?,
+        url_prefix: row.get(1)?,
+        title: row.get(2)?,
+        feed_url: row.get(3)?,
+        backfill_policy: row.get(4)?,
+        interval_minutes: row.get(5)?,
+        last_fetch_at: row.get(6)?,
+        enabled: row.get::<_, i64>(7)? != 0,
+        article_count: row.get(8)?,
+        unread_count: row.get(9)?,
+    })
+}
+
+fn map_fetch_run_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FetchRunRow> {
+    Ok(FetchRunRow {
+        id: row.get(0)?,
+        source_id: row.get(1)?,
+        source_title: row.get(2)?,
+        started_at: row.get(3)?,
+        finished_at: row.get(4)?,
+        status: row.get(5)?,
+        discovered: row.get(6)?,
+        added: row.get(7)?,
+        updated: row.get(8)?,
+        skipped: row.get(9)?,
+        failed: row.get(10)?,
+    })
 }

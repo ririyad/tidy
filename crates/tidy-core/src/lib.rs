@@ -5,6 +5,7 @@ mod fetch;
 mod http;
 mod index;
 mod robots;
+mod scheduler;
 mod settings;
 mod state;
 mod vault;
@@ -24,9 +25,14 @@ pub use fetch::{
 };
 pub use http::{FetchResponse, HttpClient, HttpClientConfig, USER_AGENT};
 pub use index::{
-    ArticleDetail, ArticleFilter, ArticleListItem, ArticleRecord, Index, SourceRecord, SourceRow,
+    ArticleDetail, ArticleFilter, ArticleListItem, ArticleRecord, FetchRunRow, Index, SourceRecord,
+    SourceRow,
 };
 pub use robots::{RobotsRules, parse_robots};
+pub use scheduler::{
+    DEFAULT_INTERVAL_MINUTES, ScheduleStatus, list_due_sources, list_run_history, schedule_status,
+    source_is_due,
+};
 pub use settings::{ReaderSettings, load_reader_settings, save_reader_settings};
 pub use state::{ArticleStatePatch, apply_article_state};
 pub use vault::{Vault, VaultError, VaultSummary};

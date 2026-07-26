@@ -30,6 +30,7 @@ pub struct FetchOptions {
     pub download_images: bool,
     pub title: Option<String>,
     pub backfill_policy: Option<String>,
+    pub interval_minutes: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,7 +103,10 @@ where
         title: options.title.clone().unwrap_or_else(|| slug.clone()),
         feed_url: None,
         discovery_mode: "auto".into(),
-        interval_minutes: 360,
+        interval_minutes: options
+            .interval_minutes
+            .unwrap_or(crate::scheduler::DEFAULT_INTERVAL_MINUTES)
+            .max(1),
         backfill_policy: backfill,
         enabled: true,
     })?;
