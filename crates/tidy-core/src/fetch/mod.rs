@@ -8,9 +8,9 @@ use chrono::Utc;
 use serde::Serialize;
 use url::Url;
 
-use crate::discover::{discover, CrawlLimits, DiscoverOptions, DiscoveredUrl};
+use crate::discover::{CrawlLimits, DiscoverOptions, DiscoveredUrl, discover};
 use crate::error::{Result, TidyError};
-use crate::extract::{content_hash, extract_article, render_markdown_html, ArticleHints};
+use crate::extract::{ArticleHints, content_hash, extract_article, render_markdown_html};
 use crate::http::{HttpClient, HttpClientConfig};
 use crate::index::{ArticleRecord, Index, SourceRecord};
 use crate::vault::Vault;
@@ -18,8 +18,8 @@ use crate::vault::Vault;
 pub use images::localize_images;
 pub use slug::{article_stem, source_slug};
 pub use writer::{
-    parse_frontmatter, read_existing_frontmatter, render_document, write_article_file,
-    ArticleFrontMatter, ExtractionInfo, WriteOutcomeStatus,
+    ArticleFrontMatter, ExtractionInfo, WriteOutcomeStatus, parse_frontmatter,
+    read_existing_frontmatter, render_document, write_article_file,
 };
 
 #[derive(Debug, Clone)]
@@ -81,7 +81,10 @@ pub async fn fetch(options: FetchOptions) -> Result<FetchReport> {
 }
 
 /// Same as [`fetch`], with a progress callback for UI updates.
-pub async fn fetch_with_progress<F>(mut options: FetchOptions, mut on_progress: F) -> Result<FetchReport>
+pub async fn fetch_with_progress<F>(
+    mut options: FetchOptions,
+    mut on_progress: F,
+) -> Result<FetchReport>
 where
     F: FnMut(FetchProgress),
 {
@@ -96,10 +99,7 @@ where
         .unwrap_or_else(|| "ask".into());
     let source = index.upsert_source(&SourceRecord {
         url_prefix: options.url_prefix.as_str().to_owned(),
-        title: options
-            .title
-            .clone()
-            .unwrap_or_else(|| slug.clone()),
+        title: options.title.clone().unwrap_or_else(|| slug.clone()),
         feed_url: None,
         discovery_mode: "auto".into(),
         interval_minutes: 360,
@@ -258,11 +258,7 @@ async fn fetch_one(
         excerpt: None,
     };
     let extracted = extract_article(&html, &item.url, &hints)?;
-    let stem = article_stem(
-        &extracted.title,
-        &item.url,
-        extracted.published.as_deref(),
-    );
+    let stem = article_stem(&extracted.title, &item.url, extracted.published.as_deref());
 
     let markdown = if download_images {
         localize_images(
@@ -309,10 +305,7 @@ async fn fetch_one(
     }
 
     let now = Utc::now().to_rfc3339();
-    let revision = existing_fm
-        .as_ref()
-        .map(|fm| fm.revision + 1)
-        .unwrap_or(1);
+    let revision = existing_fm.as_ref().map(|fm| fm.revision + 1).unwrap_or(1);
     let frontmatter = ArticleFrontMatter {
         title: extracted.title.clone(),
         url: item.url.to_string(),

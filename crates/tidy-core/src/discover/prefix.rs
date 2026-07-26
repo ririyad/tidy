@@ -53,8 +53,7 @@ pub fn matches_prefix(candidate: &Url, prefix: &Url) -> bool {
         return true;
     }
 
-    candidate_path == prefix_path.trim_end_matches('/')
-        || candidate_path.starts_with(prefix_path)
+    candidate_path == prefix_path.trim_end_matches('/') || candidate_path.starts_with(prefix_path)
 }
 
 /// True when the candidate is the prefix index itself (not an article under it).

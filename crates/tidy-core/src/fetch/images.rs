@@ -173,7 +173,12 @@ async fn resolve_and_store(
 
 fn extension_for(url: &Url, content_type: Option<&str>) -> String {
     if let Some(ctype) = content_type {
-        let mime = ctype.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        let mime = ctype
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
         match mime.as_str() {
             "image/jpeg" | "image/jpg" => return "jpg".into(),
             "image/png" => return "png".into(),
@@ -220,6 +225,9 @@ mod tests {
     fn finds_image_syntax() {
         let input = "hello ![Alt text](https://cdn.example/a.png) world";
         let found = find_markdown_image(input).unwrap();
-        assert_eq!(&input[found.url_start..found.url_end], "https://cdn.example/a.png");
+        assert_eq!(
+            &input[found.url_start..found.url_end],
+            "https://cdn.example/a.png"
+        );
     }
 }

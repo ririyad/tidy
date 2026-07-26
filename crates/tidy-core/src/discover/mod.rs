@@ -13,7 +13,7 @@ use crate::http::{HttpClient, HttpClientConfig};
 
 pub use types::{CrawlLimits, DiscoverOptions, DiscoverReport, DiscoveredUrl, DiscoverySource};
 
-use feeds::{discover_feed_urls, parse_feed_entries, FeedDiscovery};
+use feeds::{FeedDiscovery, discover_feed_urls, parse_feed_entries};
 use prefix::{is_prefix_root, matches_prefix, normalize_prefix, scrub_tracking_params};
 use sitemap::{discover_sitemaps, parse_sitemap_urls};
 

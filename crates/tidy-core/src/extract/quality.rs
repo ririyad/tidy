@@ -28,9 +28,8 @@ pub fn assess_quality(raw_html: &str, text: &str, word_count: usize) -> Extracti
     }
 
     let lower_html = raw_html.to_ascii_lowercase();
-    let looks_like_empty_spa = lower_html.contains("id=\"root\"")
-        && !lower_html.contains("<article")
-        && word_count < 80;
+    let looks_like_empty_spa =
+        lower_html.contains("id=\"root\"") && !lower_html.contains("<article") && word_count < 80;
     if looks_like_empty_spa {
         return ExtractionQuality::NeedsReview;
     }

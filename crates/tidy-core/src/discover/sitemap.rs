@@ -1,5 +1,5 @@
-use quick_xml::events::Event;
 use quick_xml::Reader;
+use quick_xml::events::Event;
 use url::Url;
 
 use crate::error::{Result, TidyError};
@@ -82,15 +82,17 @@ pub async fn parse_sitemap_urls(
         SitemapBody::UrlSet(urls) => Ok(urls),
         SitemapBody::Index(children) => {
             if depth >= max_depth {
-                warnings.push(format!(
-                    "sitemap index depth cap reached at {sitemap_url}"
-                ));
+                warnings.push(format!("sitemap index depth cap reached at {sitemap_url}"));
                 return Ok(Vec::new());
             }
             let mut all = Vec::new();
             for child in children {
                 match Box::pin(parse_sitemap_urls(
-                    client, &child, depth + 1, max_depth, warnings,
+                    client,
+                    &child,
+                    depth + 1,
+                    max_depth,
+                    warnings,
                 ))
                 .await
                 {
@@ -176,7 +178,10 @@ fn parse_sitemap_body(sitemap_url: &Url, body: &[u8]) -> Result<SitemapBody> {
 
 fn local_name(name: &[u8]) -> String {
     let full = String::from_utf8_lossy(name);
-    full.rsplit('}').next().unwrap_or(&full).to_ascii_lowercase()
+    full.rsplit('}')
+        .next()
+        .unwrap_or(&full)
+        .to_ascii_lowercase()
 }
 
 fn origin_url(url: &Url) -> Result<Url> {

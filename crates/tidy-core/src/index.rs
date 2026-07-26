@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 use crate::error::Result;
@@ -357,9 +357,7 @@ impl Index {
             params_vec.push(Box::new(source_id));
         }
 
-        sql.push_str(
-            " ORDER BY COALESCE(a.published_at, a.fetched_at) DESC, a.id DESC",
-        );
+        sql.push_str(" ORDER BY COALESCE(a.published_at, a.fetched_at) DESC, a.id DESC");
 
         if let Some(limit) = limit {
             sql.push_str(" LIMIT ?");

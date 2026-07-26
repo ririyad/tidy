@@ -37,11 +37,7 @@ pub fn save_reader_settings(vault: &Vault, settings: &ReaderSettings) -> Result<
     let path = vault.root().join(".tidy").join("config.toml");
     let contents = format!(
         "# Tidy vault configuration\nschema_version = 1\n\n[reader]\ntheme = {:?}\nfont = {:?}\nfont_size = {}\nline_height = {}\nmeasure = {:?}\n",
-        settings.theme,
-        settings.font,
-        settings.font_size,
-        settings.line_height,
-        settings.measure
+        settings.theme, settings.font, settings.font_size, settings.line_height, settings.measure
     );
     let tmp = path.with_extension("toml.tmp");
     std::fs::write(&tmp, contents.as_bytes())?;
@@ -68,11 +64,7 @@ fn parse_reader_from_toml(text: &str) -> ReaderSettings {
             continue;
         };
         let key = key.trim();
-        let value = value
-            .trim()
-            .trim_matches('"')
-            .trim_matches('\'')
-            .to_owned();
+        let value = value.trim().trim_matches('"').trim_matches('\'').to_owned();
         match key {
             "theme" => settings.theme = value,
             "font" => settings.font = value,

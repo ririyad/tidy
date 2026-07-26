@@ -20,7 +20,7 @@ struct RobotData {
 struct AllowedChecker {
     // Store the raw robots bytes so we can rebuild Robot (Robot itself isn't Clone).
     // We keep parsed sitemaps/delay separately and recreate Robot on allowed checks
-    // via a simpler approach: store the Robot's decisions by wrapping in Arc? 
+    // via a simpler approach: store the Robot's decisions by wrapping in Arc?
     // Actually Robot is not Clone. Use Arc<Robot>.
     inner: std::sync::Arc<Robot>,
 }
@@ -40,10 +40,7 @@ impl RobotsRules {
 }
 
 pub fn parse_robots(bytes: &[u8]) -> Result<RobotsRules> {
-    let agent = USER_AGENT
-        .split('/')
-        .next()
-        .unwrap_or("Tidy");
+    let agent = USER_AGENT.split('/').next().unwrap_or("Tidy");
     let robot = Robot::new(agent, bytes)
         .map_err(|error| TidyError::Message(format!("robots.txt parse error: {error}")))?;
 

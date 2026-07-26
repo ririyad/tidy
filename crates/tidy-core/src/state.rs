@@ -35,12 +35,7 @@ pub fn apply_article_state(
 
     let path = vault.root().join(&article.path);
     if path.exists() {
-        patch_frontmatter_flags(
-            &path,
-            patch.state.as_deref(),
-            patch.starred,
-            patch.archived,
-        )?;
+        patch_frontmatter_flags(&path, patch.state.as_deref(), patch.starred, patch.archived)?;
     }
 
     index

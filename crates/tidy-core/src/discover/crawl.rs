@@ -27,10 +27,7 @@ pub async fn crawl_prefix(
             continue;
         }
         if pages_fetched >= limits.page_cap {
-            warnings.push(format!(
-                "crawl page cap ({}) reached",
-                limits.page_cap
-            ));
+            warnings.push(format!("crawl page cap ({}) reached", limits.page_cap));
             break;
         }
 
@@ -168,8 +165,8 @@ fn looks_like_article(url: &Url, prefix: &Url) -> bool {
 fn is_probably_asset(url: &Url) -> bool {
     let path = url.path().to_ascii_lowercase();
     [
-        ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".pdf",
-        ".zip", ".mp4", ".mp3", ".woff", ".woff2",
+        ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".pdf", ".zip",
+        ".mp4", ".mp3", ".woff", ".woff2",
     ]
     .iter()
     .any(|ext| path.ends_with(ext))
@@ -195,7 +192,11 @@ mod tests {
         let html = r#"<a href="/blog/one">One</a><a href="https://other.com/x">x</a>"#;
         let base = Url::parse("https://example.com/blog/").unwrap();
         let links = extract_links(&base, html);
-        assert!(links.iter().any(|u| u.as_str() == "https://example.com/blog/one"));
+        assert!(
+            links
+                .iter()
+                .any(|u| u.as_str() == "https://example.com/blog/one")
+        );
     }
 
     #[test]

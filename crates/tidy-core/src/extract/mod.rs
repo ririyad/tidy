@@ -8,8 +8,8 @@ use url::Url;
 use crate::error::{Result, TidyError};
 
 pub use markdown::html_to_markdown;
-pub use metadata::{merge_metadata, ArticleHints};
-pub use quality::{assess_quality, ExtractionQuality};
+pub use metadata::{ArticleHints, merge_metadata};
+pub use quality::{ExtractionQuality, assess_quality};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -55,7 +55,11 @@ pub struct ExtractedArticle {
 }
 
 /// Extract a readable article from raw HTML.
-pub fn extract_article(html: &str, page_url: &Url, hints: &ArticleHints) -> Result<ExtractedArticle> {
+pub fn extract_article(
+    html: &str,
+    page_url: &Url,
+    hints: &ArticleHints,
+) -> Result<ExtractedArticle> {
     let mut reader = dom_smoothie::Readability::new(html, Some(page_url.as_str()), None)
         .map_err(|error| TidyError::extract(page_url.as_str(), error.to_string()))?;
 
@@ -74,9 +78,7 @@ pub fn extract_article(html: &str, page_url: &Url, hints: &ArticleHints) -> Resu
     let merged = merge_metadata(hints, &meta, &article);
     let word_count = count_words(&text);
     let quality = assess_quality(html, &text, word_count).into();
-    let excerpt = merged
-        .excerpt
-        .unwrap_or_else(|| make_excerpt(&text, 200));
+    let excerpt = merged.excerpt.unwrap_or_else(|| make_excerpt(&text, 200));
 
     Ok(ExtractedArticle {
         title: merged.title,
@@ -97,7 +99,9 @@ pub fn extract_article(html: &str, page_url: &Url, hints: &ArticleHints) -> Resu
 }
 
 pub fn count_words(text: &str) -> usize {
-    text.split_whitespace().filter(|part| !part.is_empty()).count()
+    text.split_whitespace()
+        .filter(|part| !part.is_empty())
+        .count()
 }
 
 pub fn reading_time_minutes(word_count: usize) -> u32 {

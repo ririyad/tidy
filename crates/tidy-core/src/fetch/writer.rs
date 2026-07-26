@@ -127,7 +127,10 @@ pub fn render_document(frontmatter: &ArticleFrontMatter, markdown_body: &str) ->
         .map_err(|error| TidyError::Message(format!("frontmatter serialize error: {error}")))?;
     // serde_yaml includes a trailing newline; gray-matter style wants --- fences.
     let yaml = yaml.trim_start_matches("---\n").trim_end().to_owned();
-    Ok(format!("---\n{yaml}\n---\n\n{}\n", markdown_body.trim_end()))
+    Ok(format!(
+        "---\n{yaml}\n---\n\n{}\n",
+        markdown_body.trim_end()
+    ))
 }
 
 pub fn read_existing_frontmatter(path: &Path) -> Result<Option<ArticleFrontMatter>> {
@@ -186,14 +189,16 @@ mod tests {
                 quality: "ok".into(),
             },
         };
-        let outcome = write_article_file(&vault, "example-com", "2026-01-02-hello", &fm, "Body").unwrap();
+        let outcome =
+            write_article_file(&vault, "example-com", "2026-01-02-hello", &fm, "Body").unwrap();
         assert!(matches!(outcome.status, WriteOutcomeStatus::Created));
         let parsed = read_existing_frontmatter(&outcome.absolute_path)
             .unwrap()
             .unwrap();
         assert_eq!(parsed.title, "Hello");
         assert_eq!(parsed.revision, 1);
-        let again = write_article_file(&vault, "example-com", "2026-01-02-hello", &fm, "Body").unwrap();
+        let again =
+            write_article_file(&vault, "example-com", "2026-01-02-hello", &fm, "Body").unwrap();
         assert!(matches!(again.status, WriteOutcomeStatus::Unchanged));
     }
 }

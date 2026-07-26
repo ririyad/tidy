@@ -3,7 +3,7 @@ mod rate_limit;
 
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use reqwest::{header, Client, StatusCode};
+use reqwest::{Client, StatusCode, header};
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -195,8 +195,9 @@ impl HttpClient {
             }
         }
 
-        let robots_url = texting_robots::get_robots_url(url.as_str())
-            .map_err(|error| TidyError::Message(format!("invalid robots URL for {url}: {error}")))?;
+        let robots_url = texting_robots::get_robots_url(url.as_str()).map_err(|error| {
+            TidyError::Message(format!("invalid robots URL for {url}: {error}"))
+        })?;
         let robots_url = Url::parse(&robots_url)?;
 
         let rules = match self.fetch_unchecked(&robots_url).await {
@@ -211,10 +212,7 @@ impl HttpClient {
     }
 }
 
-fn header_string(
-    headers: &reqwest::header::HeaderMap,
-    name: header::HeaderName,
-) -> Option<String> {
+fn header_string(headers: &reqwest::header::HeaderMap, name: header::HeaderName) -> Option<String> {
     headers
         .get(name)
         .and_then(|value| value.to_str().ok())
@@ -222,9 +220,5 @@ fn header_string(
 }
 
 fn origin_key(url: &Url) -> String {
-    format!(
-        "{}://{}",
-        url.scheme(),
-        url.host_str().unwrap_or_default()
-    )
+    format!("{}://{}", url.scheme(), url.host_str().unwrap_or_default())
 }

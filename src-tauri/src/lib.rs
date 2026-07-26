@@ -1,15 +1,11 @@
-use std::{
-    path::PathBuf,
-    sync::Mutex,
-};
+use std::{path::PathBuf, sync::Mutex};
 
 use serde::Serialize;
 use tauri::{Emitter, State};
 use tidy_core::{
-    apply_article_state, fetch_with_progress, load_reader_settings, parse_prefix,
-    save_reader_settings, source_slug, ArticleDetail, ArticleFilter, ArticleListItem,
-    ArticleStatePatch, FetchOptions, FetchProgress, FetchReport, Index, ReaderSettings,
-    SourceRow, Vault, VaultSummary,
+    ArticleDetail, ArticleFilter, ArticleListItem, ArticleStatePatch, FetchOptions, FetchProgress,
+    FetchReport, Index, ReaderSettings, SourceRow, Vault, VaultSummary, apply_article_state,
+    fetch_with_progress, load_reader_settings, parse_prefix, save_reader_settings, source_slug,
 };
 use url::Url;
 
@@ -72,7 +68,9 @@ fn get_open_vault(state: State<'_, AppState>) -> Result<Option<String>, String> 
 
 #[tauri::command]
 fn list_sources(state: State<'_, AppState>) -> Result<Vec<SourceRow>, String> {
-    with_vault(&state, |_, index| index.list_sources().map_err(|e| e.to_string()))
+    with_vault(&state, |_, index| {
+        index.list_sources().map_err(|e| e.to_string())
+    })
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -91,9 +89,7 @@ async fn add_source(
 ) -> Result<FetchReport, String> {
     let vault_path = {
         let guard = state.vault_path.lock().map_err(|e| e.to_string())?;
-        guard
-            .clone()
-            .ok_or_else(|| "no vault open".to_string())?
+        guard.clone().ok_or_else(|| "no vault open".to_string())?
     };
 
     let prefix = parse_prefix(&request.url_prefix).map_err(|e| e.to_string())?;
@@ -150,13 +146,7 @@ async fn refresh_source(
         .or_else(|_| parse_prefix(&prefix).map_err(|e| e.to_string()))
         .map_err(|e| e.to_string())?;
 
-    let limit = limit.or_else(|| {
-        if backfill == "full" {
-            None
-        } else {
-            Some(20)
-        }
-    });
+    let limit = limit.or_else(|| if backfill == "full" { None } else { Some(20) });
 
     let app_handle = app.clone();
     fetch_with_progress(
@@ -245,11 +235,7 @@ fn set_article_state(
 }
 
 #[tauri::command]
-fn set_article_progress(
-    state: State<'_, AppState>,
-    id: i64,
-    progress: f64,
-) -> Result<(), String> {
+fn set_article_progress(state: State<'_, AppState>, id: i64, progress: f64) -> Result<(), String> {
     with_vault(&state, |_, index| {
         index
             .update_article_progress(id, progress)

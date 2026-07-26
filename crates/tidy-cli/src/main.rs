@@ -1,9 +1,7 @@
 use std::{env, path::PathBuf, process};
 
-use anyhow::{bail, Context, Result};
-use tidy_core::{
-    discover, fetch, parse_prefix, CrawlLimits, DiscoverOptions, FetchOptions, Vault,
-};
+use anyhow::{Context, Result, bail};
+use tidy_core::{CrawlLimits, DiscoverOptions, FetchOptions, Vault, discover, fetch, parse_prefix};
 
 #[tokio::main]
 async fn main() {
@@ -73,8 +71,7 @@ async fn run() -> Result<()> {
             if json {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&report)
-                        .context("failed to serialize report")?
+                    serde_json::to_string_pretty(&report).context("failed to serialize report")?
                 );
             } else {
                 println!("prefix:          {}", report.prefix);
@@ -159,8 +156,7 @@ async fn run() -> Result<()> {
             if json {
                 println!(
                     "{}",
-                    serde_json::to_string_pretty(&report)
-                        .context("failed to serialize report")?
+                    serde_json::to_string_pretty(&report).context("failed to serialize report")?
                 );
             } else {
                 println!("source:       {}", report.source_slug);
