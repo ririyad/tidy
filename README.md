@@ -13,12 +13,26 @@ with a calm reading interface.
 
 ## Releases
 
-Tagged releases (`v*`) build a **macOS Apple Silicon** app via GitHub Actions and attach
-`.dmg` / `.app` artifacts. See [CHANGELOG.md](CHANGELOG.md) and the
-[Releases](https://github.com/ririyad/tidy/releases) page.
+Distribution is **unsigned** macOS Apple Silicon `.dmg` / `.app` artifacts on
+[GitHub Releases](https://github.com/ririyad/tidy/releases) (built by the `v*` tag workflow).
+See [CHANGELOG.md](CHANGELOG.md).
 
 CI on `main` / PRs runs fmt, clippy, tests, frontend check, and an aarch64 Tauri build
 on `macos-latest`.
+
+### First open after downloading the DMG
+
+Chrome/Safari mark GitHub downloads with a quarantine flag. For an unsigned app, macOS
+then shows *“Tidy is damaged and can’t be opened”* — that is Gatekeeper, not a bad file.
+
+After dragging **Tidy** into **Applications**:
+
+```bash
+xattr -cr /Applications/Tidy.app && open /Applications/Tidy.app
+```
+
+That is the supported install path for unsigned GitHub releases. (Notarized builds would
+skip this step; we intentionally ship unsigned.)
 
 ## Development
 

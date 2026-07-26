@@ -71,10 +71,14 @@ jobs:
             - **M3** Reader UI — Information Feed, themes, keyboard nav, source CRUD
 
             ### Platform
-            - **macOS Apple Silicon** (`aarch64-apple-darwin`) — `.dmg` / `.app` in Assets
+            - **macOS Apple Silicon** (`aarch64-apple-darwin`) — unsigned `.dmg` / `.app` in Assets
 
-            Unsigned builds: right-click → Open the first time, or allow in System Settings → Privacy & Security.
-            Code signing / notarization will land when Apple Developer credentials are configured.
+            **First open:** Gatekeeper may say the app is “damaged” after a browser download.
+            That is the quarantine flag on an unsigned build. After installing to Applications:
+
+            ```bash
+            xattr -cr /Applications/Tidy.app && open /Applications/Tidy.app
+            ```
 
             See [CHANGELOG.md](https://github.com/ririyad/tidy/blob/main/CHANGELOG.md) for details.
           releaseDraft: false
