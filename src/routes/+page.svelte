@@ -1,125 +1,368 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
-
-  type VaultSummary = {
-    path: string;
-    database_path: string;
-    created: boolean;
-  };
+  import { listen } from '@tauri-apps/api/event';
+  import { onMount } from 'svelte';
+  import { api } from '$lib/api';
+  import AddSourceModal from '$lib/components/AddSourceModal.svelte';
+  import FeedList from '$lib/components/FeedList.svelte';
+  import Reader from '$lib/components/Reader.svelte';
+  import Sidebar from '$lib/components/Sidebar.svelte';
+  import type {
+    ArticleDetail,
+    ArticleListItem,
+    FeedFilter,
+    FetchProgress,
+    ReaderSettings,
+    SourceRow,
+    VaultSummary
+  } from '$lib/types';
 
   let vault = $state<VaultSummary | null>(null);
   let choosing = $state(false);
   let error = $state('');
+  let sources = $state<SourceRow[]>([]);
+  let articles = $state<ArticleListItem[]>([]);
+  let selectedId = $state<number | null>(null);
+  let selectedSourceId = $state<number | null>(null);
+  let article = $state<ArticleDetail | null>(null);
+  let filter = $state<FeedFilter>('inbox');
+  let settings = $state<ReaderSettings>({
+    theme: 'paper',
+    font: 'serif',
+    font_size: 20,
+    line_height: 1.7,
+    measure: 'narrow'
+  });
+  let showAdd = $state(false);
+  let fetching = $state(false);
+  let progressMessage = $state('');
+  let settingsTimer: ReturnType<typeof setTimeout> | null = null;
+  let progressTimer: ReturnType<typeof setTimeout> | null = null;
+  let stateTimer: ReturnType<typeof setTimeout> | null = null;
+
+  onMount(() => {
+    let unlisten: (() => void) | undefined;
+    listen<FetchProgress>('fetch-progress', (event) => {
+      progressMessage = event.payload.message;
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  });
 
   async function chooseVault() {
     choosing = true;
     error = '';
-
     try {
-      vault = await invoke<VaultSummary | null>('select_vault');
+      const next = await api.selectVault();
+      if (next) {
+        vault = next;
+        await bootstrapVault();
+      }
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
       choosing = false;
     }
   }
+
+  async function bootstrapVault() {
+    sources = await api.listSources();
+    settings = await api.getReaderSettings();
+    await reloadArticles();
+  }
+
+  async function reloadArticles() {
+    articles = await api.listArticles(filter, selectedSourceId);
+    if (selectedId && !articles.some((item) => item.id === selectedId)) {
+      selectedId = articles[0]?.id ?? null;
+    }
+    if (selectedId) {
+      article = await api.getArticle(selectedId);
+    } else {
+      article = null;
+    }
+  }
+
+  async function openArticle(id: number) {
+    selectedId = id;
+    article = await api.getArticle(id);
+    if (article && article.state === 'unread') {
+      scheduleState({ id, state: 'read' });
+    }
+  }
+
+  function scheduleState(patch: {
+    id: number;
+    state?: string;
+    starred?: boolean;
+    archived?: boolean;
+  }) {
+    if (stateTimer) clearTimeout(stateTimer);
+    stateTimer = setTimeout(async () => {
+      article = await api.setArticleState(patch);
+      sources = await api.listSources();
+      await reloadArticles();
+    }, 180);
+  }
+
+  function scheduleSettings(next: ReaderSettings) {
+    settings = next;
+    if (settingsTimer) clearTimeout(settingsTimer);
+    settingsTimer = setTimeout(async () => {
+      settings = await api.setReaderSettings(next);
+    }, 250);
+  }
+
+  function scheduleProgress(progress: number) {
+    if (!article) return;
+    if (progressTimer) clearTimeout(progressTimer);
+    progressTimer = setTimeout(() => {
+      void api.setArticleProgress(article!.id, progress);
+    }, 400);
+  }
+
+  async function handleAddSource(payload: {
+    url_prefix: string;
+    title?: string;
+    backfill: 'recent' | 'full';
+    recent_limit: number;
+  }) {
+    fetching = true;
+    error = '';
+    try {
+      await api.addSource(payload);
+      showAdd = false;
+      sources = await api.listSources();
+      filter = 'inbox';
+      await reloadArticles();
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      fetching = false;
+      progressMessage = '';
+    }
+  }
+
+  async function refresh() {
+    fetching = true;
+    error = '';
+    try {
+      if (selectedSourceId) {
+        await api.refreshSource(selectedSourceId);
+      } else {
+        for (const source of sources) {
+          await api.refreshSource(source.id);
+        }
+      }
+      sources = await api.listSources();
+      await reloadArticles();
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      fetching = false;
+      progressMessage = '';
+    }
+  }
+
+  async function removeSource(id: number) {
+    await api.removeSource(id);
+    if (selectedSourceId === id) selectedSourceId = null;
+    sources = await api.listSources();
+    await reloadArticles();
+  }
+
+  function moveSelection(delta: number) {
+    if (articles.length === 0) return;
+    const index = articles.findIndex((item) => item.id === selectedId);
+    const nextIndex =
+      index < 0 ? 0 : Math.min(articles.length - 1, Math.max(0, index + delta));
+    void openArticle(articles[nextIndex].id);
+  }
+
+  let awaitingGo = $state(false);
+
+  function onKeydown(event: KeyboardEvent) {
+    if (!vault) return;
+    const target = event.target as HTMLElement | null;
+    if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+    if (awaitingGo) {
+      awaitingGo = false;
+      if (event.key === 'f') {
+        event.preventDefault();
+        filter = 'inbox';
+        selectedSourceId = null;
+        void reloadArticles();
+      } else if (event.key === 'r') {
+        event.preventDefault();
+        filter = 'starred';
+        void reloadArticles();
+      }
+      return;
+    }
+
+    switch (event.key) {
+      case 'j':
+        event.preventDefault();
+        moveSelection(1);
+        break;
+      case 'k':
+        event.preventDefault();
+        moveSelection(-1);
+        break;
+      case 'o':
+        if (selectedId) void openArticle(selectedId);
+        break;
+      case 'u':
+        if (article) {
+          scheduleState({
+            id: article.id,
+            state: article.state === 'unread' ? 'read' : 'unread'
+          });
+        }
+        break;
+      case 's':
+        if (article) scheduleState({ id: article.id, starred: !article.starred });
+        break;
+      case 'e':
+        if (article) scheduleState({ id: article.id, archived: !article.archived });
+        break;
+      case 'r':
+        void refresh();
+        break;
+      case 'g':
+        awaitingGo = true;
+        break;
+      case '/':
+        event.preventDefault();
+        showAdd = true;
+        break;
+    }
+  }
 </script>
 
+<svelte:window onkeydown={onKeydown} />
+
 <svelte:head>
-  <title>Tidy — Your information, thoughtfully gathered</title>
+  <title>Tidy — Information feed</title>
 </svelte:head>
 
-<main class="min-h-screen px-6 py-8 sm:px-10 sm:py-12">
-  <div class="mx-auto flex min-h-[calc(100vh-6rem)] max-w-6xl flex-col">
-    <header class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="grid size-10 place-items-center rounded-full bg-[#2d3224] text-[#f4f1e8]">
-          <span class="text-lg font-semibold">T</span>
+{#if !vault}
+  <main class="min-h-screen px-6 py-10 sm:px-10">
+    <div class="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl flex-col">
+      <header class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="grid size-10 place-items-center rounded-full bg-[var(--ink)] text-[var(--paper)]">
+            <span class="text-lg font-semibold">T</span>
+          </div>
+          <span class="text-sm font-semibold tracking-[0.18em] uppercase">Tidy</span>
         </div>
-        <span class="text-sm font-semibold tracking-[0.18em] uppercase">Tidy</span>
-      </div>
-      <span class="rounded-full border border-[#cecbbf] bg-white/45 px-3 py-1 text-xs text-[#696b61]">
-        Local-first
-      </span>
-    </header>
+        <span class="text-xs text-[var(--ink-soft)]">Local-first</span>
+      </header>
 
-    <section class="grid flex-1 items-center gap-14 py-16 lg:grid-cols-[1.1fr_0.9fr]">
-      <div>
-        <p class="mb-5 text-sm font-semibold tracking-[0.16em] text-[#69764c] uppercase">
-          Your information feed
-        </p>
-        <h1 class="max-w-3xl font-serif text-5xl leading-[1.02] tracking-[-0.045em] sm:text-7xl">
-          Read what matters.<br />Keep it yours.
-        </h1>
-        <p class="mt-7 max-w-xl text-lg leading-8 text-[#64665e]">
-          Tidy gathers writing from the sites you choose, stores it as portable Markdown, and
-          gives every article one calm place to read.
-        </p>
-
-        <div class="mt-10">
+      <section class="grid flex-1 items-center gap-12 py-16 lg:grid-cols-[1.05fr_0.95fr]">
+        <div>
+          <p class="mb-4 text-sm font-semibold tracking-[0.16em] text-[var(--accent)] uppercase">
+            Your information feed
+          </p>
+          <h1
+            class="max-w-3xl font-[family-name:var(--font-reader)] text-5xl leading-[1.02] tracking-[-0.045em] sm:text-7xl"
+          >
+            Read what matters.<br />Keep it yours.
+          </h1>
+          <p class="mt-6 max-w-xl text-lg leading-8 text-[var(--ink-soft)]">
+            Choose a vault folder. Tidy fetches the blogs you care about into portable Markdown
+            and a calm reading view.
+          </p>
           <button
-            class="inline-flex min-h-12 items-center gap-3 rounded-full bg-[#2d3224] px-6 py-3 font-semibold text-[#faf8f1] shadow-[0_10px_30px_rgb(45_50_36/18%)] transition hover:-translate-y-0.5 hover:bg-[#3a4130] disabled:cursor-wait disabled:opacity-70"
+            class="mt-9 inline-flex min-h-12 items-center gap-3 rounded-full bg-[var(--ink)] px-6 py-3 font-semibold text-[var(--paper)]"
             onclick={chooseVault}
             disabled={choosing}
           >
-            {choosing ? 'Opening…' : vault ? 'Choose another vault' : 'Choose your vault'}
+            {choosing ? 'Opening…' : 'Choose your vault'}
             <span aria-hidden="true">→</span>
           </button>
-          <p class="mt-3 text-sm text-[#7b7d74]">
-            Select an empty folder or an existing Tidy vault. Your files stay on your machine.
-          </p>
+          {#if error}
+            <p class="mt-5 max-w-xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {error}
+            </p>
+          {/if}
         </div>
-
-        {#if error}
-          <p class="mt-5 max-w-xl rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            {error}
-          </p>
-        {/if}
-
-        {#if vault}
-          <div class="mt-6 max-w-xl rounded-2xl border border-[#c8ceb0] bg-[#edf0dc] p-5">
-            <p class="font-semibold text-[#3f482d]">
-              {vault.created ? 'Your vault is ready.' : 'Vault opened.'}
+        <div class="relative hidden min-h-[28rem] lg:block" aria-hidden="true">
+          <div class="absolute inset-0 rotate-2 rounded-[2rem] bg-[var(--paper-deep)]"></div>
+          <div
+            class="absolute inset-0 -rotate-2 overflow-hidden rounded-[2rem] border border-[var(--line)] bg-white/80 p-8 shadow-[0_30px_70px_rgb(19_32_51/10%)]"
+          >
+            <p class="text-xs font-semibold tracking-[0.14em] text-[var(--ink-soft)] uppercase">
+              Inbox
             </p>
-            <p class="mt-1 truncate font-mono text-xs text-[#687052]" title={vault.path}>
-              {vault.path}
-            </p>
+            <h2 class="mt-8 font-[family-name:var(--font-reader)] text-4xl tracking-[-0.03em]">
+              The quiet craft of attention
+            </h2>
+            <p class="mt-4 text-sm text-[var(--ink-soft)]">Today · 11 min</p>
+            <div class="mt-10 space-y-3">
+              <div class="h-2 rounded-full bg-[var(--paper-deep)]"></div>
+              <div class="h-2 w-5/6 rounded-full bg-[var(--paper-deep)]"></div>
+              <div class="h-2 w-4/5 rounded-full bg-[var(--paper-deep)]"></div>
+            </div>
           </div>
-        {/if}
-      </div>
-
-      <div class="relative hidden min-h-[34rem] lg:block" aria-hidden="true">
-        <div class="absolute inset-8 rotate-3 rounded-[2rem] border border-[#d0ccbf] bg-[#e9e4d8]"></div>
-        <article class="absolute inset-0 -rotate-2 overflow-hidden rounded-[2rem] border border-[#d8d4c8] bg-[#fcfbf7] p-9 shadow-[0_30px_70px_rgb(55_52_40/12%)]">
-          <div class="flex items-center justify-between text-xs font-medium text-[#838177]">
-            <span>THE MARGINALIAN</span>
-            <span>12 MIN READ</span>
-          </div>
-          <div class="mt-12 h-3 w-24 rounded-full bg-[#dce2c6]"></div>
-          <h2 class="mt-5 font-serif text-4xl leading-tight tracking-[-0.03em]">
-            The quiet art of paying attention
-          </h2>
-          <p class="mt-4 text-sm leading-6 text-[#76766f]">Maria Popova · Today</p>
-          <div class="mt-10 space-y-3">
-            <div class="h-2 rounded-full bg-[#e5e2da]"></div>
-            <div class="h-2 rounded-full bg-[#e5e2da]"></div>
-            <div class="h-2 w-5/6 rounded-full bg-[#e5e2da]"></div>
-          </div>
-          <blockquote class="mt-10 border-l-2 border-[#9eaa73] pl-6 font-serif text-2xl leading-9 text-[#4d5046]">
-            “Attention is the rarest and purest form of generosity.”
-          </blockquote>
-          <div class="mt-10 space-y-3">
-            <div class="h-2 rounded-full bg-[#e5e2da]"></div>
-            <div class="h-2 w-11/12 rounded-full bg-[#e5e2da]"></div>
-            <div class="h-2 w-3/4 rounded-full bg-[#e5e2da]"></div>
-          </div>
-        </article>
-      </div>
-    </section>
-
-    <footer class="flex items-center justify-between border-t border-[#d8d3c5] pt-5 text-xs text-[#85867d]">
-      <span>Private by default</span>
-      <span>Markdown + SQLite</span>
-    </footer>
+        </div>
+      </section>
+    </div>
+  </main>
+{:else}
+  <div class="app-shell">
+    <Sidebar
+      {sources}
+      {filter}
+      {selectedSourceId}
+      {fetching}
+      onFilter={(next: FeedFilter) => {
+        filter = next;
+        void reloadArticles();
+      }}
+      onSelectSource={(id: number | null) => {
+        selectedSourceId = id;
+        void reloadArticles();
+      }}
+      onAddSource={() => (showAdd = true)}
+      onRefresh={refresh}
+      onRemoveSource={removeSource}
+      onChangeVault={chooseVault}
+    />
+    <FeedList
+      {articles}
+      {selectedId}
+      {progressMessage}
+      onSelect={openArticle}
+    />
+    <Reader
+      {article}
+      {settings}
+      onSettings={scheduleSettings}
+      onToggleRead={() =>
+        article &&
+        scheduleState({
+          id: article.id,
+          state: article.state === 'unread' ? 'read' : 'unread'
+        })}
+      onToggleStar={() => article && scheduleState({ id: article.id, starred: !article.starred })}
+      onToggleArchive={() =>
+        article && scheduleState({ id: article.id, archived: !article.archived })}
+      onProgress={scheduleProgress}
+    />
   </div>
-</main>
+
+  {#if error}
+    <div class="fixed bottom-4 left-1/2 z-40 max-w-xl -translate-x-1/2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 shadow-lg">
+      {error}
+    </div>
+  {/if}
+{/if}
+
+<AddSourceModal
+  open={showAdd}
+  busy={fetching}
+  onClose={() => (showAdd = false)}
+  onSubmit={handleAddSource}
+/>
