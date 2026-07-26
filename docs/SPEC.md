@@ -84,6 +84,16 @@ Tables:
 
 `PRAGMA user_version = 1` tracks the applied schema revision.
 
+## Scheduler (M4)
+
+- Each source has `interval_minutes` (default 360) and `enabled`
+- A source is **due** when enabled and either never fetched or
+  `now >= last_fetch_at + interval_minutes`
+- Opening the app (and a soft in-app tick) refreshes due sources
+- `fetch_runs` stores per-run counts for history UI / `tidy schedule --runs`
+
+Manual **Refresh** always fetches the selected source (or all enabled sources).
+
 ## Initialization
 
 Creating a vault:
