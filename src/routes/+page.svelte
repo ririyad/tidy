@@ -11,6 +11,7 @@
     ArticleListItem,
     FeedFilter,
     FetchProgress,
+    FetchRunRow,
     ReaderSettings,
     SourceRow,
     VaultSummary
@@ -35,9 +36,11 @@
   let showAdd = $state(false);
   let fetching = $state(false);
   let progressMessage = $state('');
+  let fetchRuns = $state<FetchRunRow[]>([]);
   let settingsTimer: ReturnType<typeof setTimeout> | null = null;
   let progressTimer: ReturnType<typeof setTimeout> | null = null;
   let stateTimer: ReturnType<typeof setTimeout> | null = null;
+  let scheduleTimer: ReturnType<typeof setInterval> | null = null;
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -46,7 +49,10 @@
     }).then((fn) => {
       unlisten = fn;
     });
-    return () => unlisten?.();
+    return () => {
+      unlisten?.();
+      if (scheduleTimer) clearInterval(scheduleTimer);
+    };
   });
 
   async function chooseVault() {
@@ -69,6 +75,44 @@
     sources = await api.listSources();
     settings = await api.getReaderSettings();
     await reloadArticles();
+    await reloadFetchRuns();
+    startScheduleTicker();
+    void catchUp();
+  }
+
+  function startScheduleTicker() {
+    if (scheduleTimer) clearInterval(scheduleTimer);
+    // Soft in-app tick: catch up any due sources about once a minute while open.
+    scheduleTimer = setInterval(() => {
+      if (!vault || fetching) return;
+      void catchUp({ quiet: true });
+    }, 60_000);
+  }
+
+  async function reloadFetchRuns() {
+    fetchRuns = await api.listFetchRuns(selectedSourceId, 8);
+  }
+
+  async function catchUp(options?: { quiet?: boolean }) {
+    if (fetching) return;
+    const due = await api.listDueSources();
+    if (due.length === 0) return;
+    fetching = true;
+    if (!options?.quiet) error = '';
+    try {
+      progressMessage = `Catching up ${due.length} source${due.length === 1 ? '' : 's'}…`;
+      await api.catchUpDueSources();
+      sources = await api.listSources();
+      await reloadArticles();
+      await reloadFetchRuns();
+    } catch (cause) {
+      if (!options?.quiet) {
+        error = cause instanceof Error ? cause.message : String(cause);
+      }
+    } finally {
+      fetching = false;
+      progressMessage = '';
+    }
   }
 
   async function reloadArticles() {
@@ -126,6 +170,7 @@
     title?: string;
     backfill: 'recent' | 'full';
     recent_limit: number;
+    interval_minutes: number;
   }) {
     fetching = true;
     error = '';
@@ -135,6 +180,7 @@
       sources = await api.listSources();
       filter = 'inbox';
       await reloadArticles();
+      await reloadFetchRuns();
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -150,12 +196,13 @@
       if (selectedSourceId) {
         await api.refreshSource(selectedSourceId);
       } else {
-        for (const source of sources) {
+        for (const source of sources.filter((item) => item.enabled)) {
           await api.refreshSource(source.id);
         }
       }
       sources = await api.listSources();
       await reloadArticles();
+      await reloadFetchRuns();
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -169,6 +216,17 @@
     if (selectedSourceId === id) selectedSourceId = null;
     sources = await api.listSources();
     await reloadArticles();
+    await reloadFetchRuns();
+  }
+
+  async function toggleSourceEnabled(id: number, enabled: boolean) {
+    await api.updateSourceSchedule({ sourceId: id, enabled });
+    sources = await api.listSources();
+  }
+
+  async function changeSourceInterval(id: number, minutes: number) {
+    await api.updateSourceSchedule({ sourceId: id, intervalMinutes: minutes });
+    sources = await api.listSources();
   }
 
   function moveSelection(delta: number) {
@@ -317,6 +375,7 @@
       {filter}
       {selectedSourceId}
       {fetching}
+      {fetchRuns}
       onFilter={(next: FeedFilter) => {
         filter = next;
         void reloadArticles();
@@ -324,11 +383,14 @@
       onSelectSource={(id: number | null) => {
         selectedSourceId = id;
         void reloadArticles();
+        void reloadFetchRuns();
       }}
       onAddSource={() => (showAdd = true)}
       onRefresh={refresh}
       onRemoveSource={removeSource}
       onChangeVault={chooseVault}
+      onToggleEnabled={toggleSourceEnabled}
+      onChangeInterval={changeSourceInterval}
     />
     <FeedList
       {articles}

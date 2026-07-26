@@ -3,7 +3,9 @@ import type {
   ArticleDetail,
   ArticleListItem,
   FeedFilter,
+  FetchRunRow,
   ReaderSettings,
+  ScheduleStatus,
   SourceRow,
   VaultSummary
 } from './types';
@@ -16,10 +18,29 @@ export const api = {
     title?: string;
     backfill: 'recent' | 'full';
     recent_limit?: number;
+    interval_minutes?: number;
   }) => invoke('add_source', { request: payload }),
   refreshSource: (sourceId: number, limit?: number) =>
     invoke('refresh_source', { sourceId, limit }),
   removeSource: (sourceId: number) => invoke<boolean>('remove_source', { sourceId }),
+  updateSourceSchedule: (payload: {
+    sourceId: number;
+    intervalMinutes?: number;
+    enabled?: boolean;
+  }) =>
+    invoke<SourceRow>('update_source_schedule', {
+      sourceId: payload.sourceId,
+      intervalMinutes: payload.intervalMinutes ?? null,
+      enabled: payload.enabled ?? null
+    }),
+  listDueSources: () => invoke<SourceRow[]>('list_due_sources'),
+  getScheduleStatus: () => invoke<ScheduleStatus[]>('get_schedule_status'),
+  listFetchRuns: (sourceId?: number | null, limit = 25) =>
+    invoke<FetchRunRow[]>('list_fetch_runs', {
+      sourceId: sourceId ?? null,
+      limit
+    }),
+  catchUpDueSources: () => invoke('catch_up_due_sources'),
   listArticles: (filter: FeedFilter, sourceId?: number | null) =>
     invoke<ArticleListItem[]>('list_articles', {
       request: {

@@ -10,10 +10,35 @@ export type SourceRow = {
   title: string;
   feed_url: string | null;
   backfill_policy: string;
+  interval_minutes: number;
   last_fetch_at: string | null;
   enabled: boolean;
   article_count: number;
   unread_count: number;
+};
+
+export type FetchRunRow = {
+  id: number;
+  source_id: number;
+  source_title: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  discovered: number;
+  added: number;
+  updated: number;
+  skipped: number;
+  failed: number;
+};
+
+export type ScheduleStatus = {
+  source_id: number;
+  title: string;
+  interval_minutes: number;
+  last_fetch_at: string | null;
+  enabled: boolean;
+  due: boolean;
+  next_fetch_at: string | null;
 };
 
 export type ArticleListItem = {

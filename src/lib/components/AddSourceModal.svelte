@@ -13,6 +13,7 @@
       title?: string;
       backfill: 'recent' | 'full';
       recent_limit: number;
+      interval_minutes: number;
     }) => void;
   } = $props();
 
@@ -20,6 +21,15 @@
   let title = $state('');
   let backfill = $state<'recent' | 'full'>('recent');
   let recentLimit = $state(20);
+  let intervalMinutes = $state(360);
+
+  const intervalChoices = [
+    { label: '1 hour', value: 60 },
+    { label: '6 hours', value: 360 },
+    { label: '12 hours', value: 720 },
+    { label: 'Daily', value: 1440 },
+    { label: 'Weekly', value: 10080 }
+  ];
 
   function submit(event: Event) {
     event.preventDefault();
@@ -28,7 +38,8 @@
       url_prefix: url.trim(),
       title: title.trim() || undefined,
       backfill,
-      recent_limit: recentLimit
+      recent_limit: recentLimit,
+      interval_minutes: intervalMinutes
     });
   }
 </script>
@@ -90,6 +101,18 @@
           />
         </label>
       {/if}
+
+      <label class="mt-4 block text-sm font-medium">
+        Refresh interval
+        <select
+          class="mt-1.5 w-full rounded-xl border border-[var(--line)] bg-white px-3 py-2.5"
+          bind:value={intervalMinutes}
+        >
+          {#each intervalChoices as choice}
+            <option value={choice.value}>{choice.label}</option>
+          {/each}
+        </select>
+      </label>
 
       <div class="mt-6 flex justify-end gap-2">
         <button
