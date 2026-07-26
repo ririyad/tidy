@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Apple Silicon checks
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: aarch64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            ./src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Frontend typecheck
+        run: npm run check
+
+      - name: Cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: Cargo clippy
+        run: cargo clippy --workspace --all-targets
+
+      - name: Cargo test
+        run: cargo test --workspace
+
+      - name: Build Tauri app (aarch64)
+        run: npm run tauri build -- --target aarch64-apple-darwin

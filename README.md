@@ -11,6 +11,15 @@ with a calm reading interface.
 - **Engine:** Rust workspace (`tidy-core`, `tidy-cli`, `src-tauri`)
 - **Storage:** Markdown + YAML frontmatter (source of truth) + SQLite index
 
+## Releases
+
+Tagged releases (`v*`) build a **macOS Apple Silicon** app via GitHub Actions and attach
+`.dmg` / `.app` artifacts. See [CHANGELOG.md](CHANGELOG.md) and the
+[Releases](https://github.com/ririyad/tidy/releases) page.
+
+CI on `main` / PRs runs fmt, clippy, tests, frontend check, and an aarch64 Tauri build
+on `macos-latest`.
+
 ## Development
 
 ```bash
