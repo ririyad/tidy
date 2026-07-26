@@ -244,11 +244,7 @@ impl Index {
         self.get_source(source_id)
     }
 
-    pub fn list_fetch_runs(
-        &self,
-        source_id: Option<i64>,
-        limit: i64,
-    ) -> Result<Vec<FetchRunRow>> {
+    pub fn list_fetch_runs(&self, source_id: Option<i64>, limit: i64) -> Result<Vec<FetchRunRow>> {
         let limit = limit.clamp(1, 200);
         let mut out = Vec::new();
         if let Some(source_id) = source_id {

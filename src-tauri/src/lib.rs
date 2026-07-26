@@ -4,8 +4,8 @@ use serde::Serialize;
 use tauri::{Emitter, State};
 use tidy_core::{
     ArticleDetail, ArticleFilter, ArticleListItem, ArticleStatePatch, FetchOptions, FetchProgress,
-    FetchReport, FetchRunRow, Index, ReaderSettings, ScheduleStatus, SourceRow, Vault, VaultSummary,
-    apply_article_state, fetch_with_progress, list_due_sources as find_due_sources,
+    FetchReport, FetchRunRow, Index, ReaderSettings, ScheduleStatus, SourceRow, Vault,
+    VaultSummary, apply_article_state, fetch_with_progress, list_due_sources as find_due_sources,
     list_run_history, load_reader_settings, parse_prefix, save_reader_settings, schedule_status,
     source_slug,
 };

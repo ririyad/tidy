@@ -257,8 +257,7 @@ async fn run() -> Result<()> {
                     }
                 }
             } else {
-                let statuses =
-                    schedule_status(&index).context("failed to load schedule status")?;
+                let statuses = schedule_status(&index).context("failed to load schedule status")?;
                 if json {
                     println!(
                         "{}",
