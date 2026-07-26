@@ -17,6 +17,10 @@ pub enum TidyError {
     Feed { url: String, message: String },
     #[error("failed to parse sitemap from {url}: {message}")]
     Sitemap { url: String, message: String },
+    #[error("failed to extract article from {url}: {message}")]
+    Extract { url: String, message: String },
+    #[error("database error: {0}")]
+    Database(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("{0}")]
@@ -26,6 +30,13 @@ pub enum TidyError {
 impl TidyError {
     pub fn http(url: impl Into<String>, message: impl Into<String>) -> Self {
         Self::Http {
+            url: url.into(),
+            message: message.into(),
+        }
+    }
+
+    pub fn extract(url: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::Extract {
             url: url.into(),
             message: message.into(),
         }

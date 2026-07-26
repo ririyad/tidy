@@ -1,6 +1,9 @@
 mod discover;
 mod error;
+mod extract;
+mod fetch;
 mod http;
+mod index;
 mod robots;
 mod vault;
 
@@ -9,7 +12,15 @@ pub use discover::{
     DiscoverySource,
 };
 pub use error::TidyError;
+pub use extract::{
+    content_hash, extract_article, render_markdown_html, ArticleHints, ExtractedArticle,
+    QualityLabel,
+};
+pub use fetch::{
+    fetch, source_slug, ArticleFrontMatter, FetchOptions, FetchReport, FetchStatus,
+};
 pub use http::{FetchResponse, HttpClient, HttpClientConfig, USER_AGENT};
+pub use index::{ArticleRecord, Index, SourceRecord};
 pub use robots::{parse_robots, RobotsRules};
 pub use vault::{Vault, VaultError, VaultSummary};
 

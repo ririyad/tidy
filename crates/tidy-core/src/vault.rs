@@ -94,6 +94,20 @@ impl Vault {
     pub fn database_path(&self) -> PathBuf {
         self.root.join(".tidy").join("index.db")
     }
+
+    pub fn cache_dir(&self) -> PathBuf {
+        self.root.join(".tidy").join("cache")
+    }
+
+    pub fn sources_dir(&self) -> PathBuf {
+        self.root.join("Sources")
+    }
+
+    pub fn attachments_dir(&self) -> PathBuf {
+        let path = self.root.join("attachments");
+        let _ = fs::create_dir_all(&path);
+        path
+    }
 }
 
 fn write_if_missing(path: &Path, contents: &str) -> Result<(), std::io::Error> {
