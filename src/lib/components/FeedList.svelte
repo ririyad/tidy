@@ -1,0 +1,74 @@
+<script lang="ts">
+  import { groupByDay } from '../format';
+  import type { ArticleListItem } from '../types';
+
+  let {
+    articles,
+    selectedId,
+    progressMessage,
+    onSelect
+  }: {
+    articles: ArticleListItem[];
+    selectedId: number | null;
+    progressMessage: string;
+    onSelect: (id: number) => void;
+  } = $props();
+
+  const groups = $derived(groupByDay(articles));
+</script>
+
+<section class="panel flex h-full flex-col">
+  <header class="border-b border-[var(--line)] px-5 py-4">
+    <p class="text-xs font-semibold tracking-[0.14em] text-[var(--ink-soft)] uppercase">Feed</p>
+    <p class="mt-1 text-sm text-[var(--ink-soft)]">
+      {articles.length} articles
+      {#if progressMessage}
+        <span class="text-[var(--accent)]"> · {progressMessage}</span>
+      {/if}
+    </p>
+  </header>
+
+  <div class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+    {#if articles.length === 0}
+      <div class="px-4 py-10 text-sm leading-7 text-[var(--ink-soft)]">
+        Nothing here yet. Add a source or switch filters.
+      </div>
+    {:else}
+      {#each groups as group}
+        <div class="mb-4">
+          <p class="px-3 pb-2 text-[0.7rem] font-semibold tracking-[0.12em] text-[var(--ink-soft)] uppercase">
+            {group.label}
+          </p>
+          {#each group.articles as article}
+            <button
+              class="feed-item mb-1 w-full rounded-2xl px-3 py-3 text-left transition
+                {selectedId === article.id
+                ? 'bg-[var(--accent-soft)]'
+                : 'hover:bg-white/70'}"
+              onclick={() => onSelect(article.id)}
+            >
+              <div class="flex items-start justify-between gap-3">
+                <p
+                  class="text-[0.95rem] leading-snug
+                    {article.state === 'unread' ? 'font-semibold' : 'font-medium text-[var(--ink-soft)]'}"
+                >
+                  {article.title}
+                </p>
+                {#if article.starred}
+                  <span class="text-[var(--accent)]" aria-label="Starred">★</span>
+                {/if}
+              </div>
+              <p class="mt-1 line-clamp-2 text-xs leading-5 text-[var(--ink-soft)]">
+                {article.source_title}
+                · {article.reading_time} min
+                {#if article.author}
+                  · {article.author}
+                {/if}
+              </p>
+            </button>
+          {/each}
+        </div>
+      {/each}
+    {/if}
+  </div>
+</section>
