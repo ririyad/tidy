@@ -20,3 +20,5 @@ serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tidy-core = { path = "../crates/tidy-core" }
+url.workspace = true
+
