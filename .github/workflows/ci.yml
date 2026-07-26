@@ -12,8 +12,18 @@ concurrency:
 
 jobs:
   check:
-    name: Apple Silicon checks
+    name: macOS checks (${{ matrix.name }})
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple Silicon
+            rust_target: aarch64-apple-darwin
+            run_lint: true
+          - name: Intel
+            rust_target: x86_64-apple-darwin
+            run_lint: false
     steps:
       - uses: actions/checkout@v7
 
@@ -27,7 +37,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.rust_target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -35,21 +45,26 @@ jobs:
           workspaces: |
             . -> target
             ./src-tauri -> target
+          key: ${{ matrix.rust_target }}
 
       - name: Install frontend dependencies
         run: npm ci
 
       - name: Frontend typecheck
+        if: matrix.run_lint
         run: npm run check
 
       - name: Cargo fmt
+        if: matrix.run_lint
         run: cargo fmt --all -- --check
 
       - name: Cargo clippy
+        if: matrix.run_lint
         run: cargo clippy --workspace --all-targets
 
       - name: Cargo test
+        if: matrix.run_lint
         run: cargo test --workspace
 
-      - name: Build Tauri app (aarch64)
-        run: npm run tauri build -- --target aarch64-apple-darwin
+      - name: Build Tauri app (${{ matrix.rust_target }})
+        run: npm run tauri build -- --target ${{ matrix.rust_target }}

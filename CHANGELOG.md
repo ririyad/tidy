@@ -2,18 +2,26 @@
 
 All notable changes to Tidy are documented here.
 
+## [0.2.0] — 2026-07-26
+
+### Added
+
+- **M4 Scheduler** — per-source refresh intervals, pause/resume, launch catch-up, run history
+- CLI `tidy schedule` for due status and fetch runs
+- **macOS Intel** (`x86_64`) release packages alongside Apple Silicon
+
+### Platforms
+
+- `Tidy_*_aarch64.dmg` — Apple Silicon
+- `Tidy_*_x64.dmg` — Intel
+
+Unsigned installs still need `xattr -cr /Applications/Tidy.app` after a browser download.
+
 ## [0.1.1] — 2026-07-26
 
 ### Fixed
 
 - Run `svelte-kit sync` before typecheck so fresh CI checkouts (without `.svelte-kit/`) pass
-
-### Not yet (at 0.1.1)
-
-- Per-source scheduler and launch catch-up (**M4**) — landed on `main` after this tag
-- Full-text search, tags, smart views (**M5**)
-- Highlights and notes (**M6**)
-- Onboarding polish, Intel Mac / Windows / Linux packages, signing (**M7+**)
 
 ## [0.1.0] — 2026-07-26
 
@@ -31,5 +39,6 @@ First tagged release. Milestones **M0–M3** are in place: vault + fetch engine 
 - Live fetch progress events and keyboard navigation
 - CI and release packaging for **macOS Apple Silicon** (`aarch64-apple-darwin`)
 
+[0.2.0]: https://github.com/ririyad/tidy/releases/tag/v0.2.0
 [0.1.1]: https://github.com/ririyad/tidy/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ririyad/tidy/releases/tag/v0.1.0

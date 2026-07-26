@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to build for (e.g. v0.1.0)"
+        description: "Existing release tag to build for (e.g. v0.2.0)"
         required: true
         type: string
 
@@ -15,9 +15,19 @@ permissions:
   contents: write
 
 jobs:
-  release-macos-arm64:
-    name: macOS Apple Silicon
+  release-macos:
+    name: ${{ matrix.name }}
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            rust_target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - name: macOS Intel
+            rust_target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v7
         with:
@@ -32,7 +42,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.rust_target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -40,6 +50,7 @@ jobs:
           workspaces: |
             . -> target
             ./src-tauri -> target
+          key: release-${{ matrix.rust_target }}
 
       - name: Install frontend dependencies
         run: npm ci
@@ -54,7 +65,7 @@ jobs:
           fi
           echo "version=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Build and upload Apple Silicon release
+      - name: Build and upload ${{ matrix.name }}
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,13 +76,14 @@ jobs:
             Local-first desktop reader and fetch engine (Markdown vault + SQLite index).
 
             ### Included in this release
-            - **M0** Scaffold — Tauri + SvelteKit shell, vault init, SQLite schema
-            - **M1** Discovery — polite HTTP, robots/feeds/sitemaps, crawl fallback
-            - **M2** Extraction — readability → markdown, images, vault writes
-            - **M3** Reader UI — Information Feed, themes, keyboard nav, source CRUD
+            - **M0–M3** Vault, discovery, extraction, Information Feed reader
+            - **M4** Per-source scheduler, launch catch-up, fetch run history
 
-            ### Platform
-            - **macOS Apple Silicon** (`aarch64-apple-darwin`) — unsigned `.dmg` / `.app` in Assets
+            ### Platforms (unsigned)
+            - **Apple Silicon** — `Tidy_*_aarch64.dmg` / `.app.tar.gz`
+            - **Intel** — `Tidy_*_x64.dmg` / `.app.tar.gz`
+
+            Pick the DMG that matches your Mac (Apple menu → About This Mac).
 
             **First open:** Gatekeeper may say the app is “damaged” after a browser download.
             That is the quarantine flag on an unsigned build. After installing to Applications:
@@ -83,4 +95,4 @@ jobs:
             See [CHANGELOG.md](https://github.com/ririyad/tidy/blob/main/CHANGELOG.md) for details.
           releaseDraft: false
           prerelease: false
-          args: --target aarch64-apple-darwin
+          args: ${{ matrix.args }}

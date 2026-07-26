@@ -13,12 +13,12 @@ with a calm reading interface.
 
 ## Releases
 
-Distribution is **unsigned** macOS Apple Silicon `.dmg` / `.app` artifacts on
-[GitHub Releases](https://github.com/ririyad/tidy/releases) (built by the `v*` tag workflow).
+Distribution is **unsigned** macOS `.dmg` / `.app` artifacts for **Apple Silicon and Intel**
+on [GitHub Releases](https://github.com/ririyad/tidy/releases) (built by the `v*` tag workflow).
 See [CHANGELOG.md](CHANGELOG.md).
 
-CI on `main` / PRs runs fmt, clippy, tests, frontend check, and an aarch64 Tauri build
-on `macos-latest`.
+CI on `main` / PRs runs checks on Apple Silicon and builds Tauri for both
+`aarch64-apple-darwin` and `x86_64-apple-darwin`.
 
 ### First open after downloading the DMG
 
