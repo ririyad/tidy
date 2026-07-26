@@ -4,8 +4,10 @@ use serde::Serialize;
 use tauri::{Emitter, State};
 use tidy_core::{
     ArticleDetail, ArticleFilter, ArticleListItem, ArticleStatePatch, FetchOptions, FetchProgress,
-    FetchReport, Index, ReaderSettings, SourceRow, Vault, VaultSummary, apply_article_state,
-    fetch_with_progress, load_reader_settings, parse_prefix, save_reader_settings, source_slug,
+    FetchReport, FetchRunRow, Index, ReaderSettings, ScheduleStatus, SourceRow, Vault, VaultSummary,
+    apply_article_state, fetch_with_progress, list_due_sources as find_due_sources,
+    list_run_history, load_reader_settings, parse_prefix, save_reader_settings, schedule_status,
+    source_slug,
 };
 use url::Url;
 
@@ -79,6 +81,7 @@ struct AddSourceRequest {
     title: Option<String>,
     backfill: String, // "recent" | "full"
     recent_limit: Option<usize>,
+    interval_minutes: Option<i64>,
 }
 
 #[tauri::command]
@@ -111,6 +114,7 @@ async fn add_source(
             download_images: true,
             title: Some(title),
             backfill_policy: Some(request.backfill),
+            interval_minutes: request.interval_minutes,
         },
         move |progress: FetchProgress| {
             let _ = app_handle.emit("fetch-progress", &progress);
@@ -157,6 +161,7 @@ async fn refresh_source(
             download_images: true,
             title: Some(title),
             backfill_policy: Some(backfill),
+            interval_minutes: None,
         },
         move |progress: FetchProgress| {
             let _ = app_handle.emit("fetch-progress", &progress);
@@ -164,6 +169,64 @@ async fn refresh_source(
     )
     .await
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_source_schedule(
+    state: State<'_, AppState>,
+    source_id: i64,
+    interval_minutes: Option<i64>,
+    enabled: Option<bool>,
+) -> Result<SourceRow, String> {
+    with_vault(&state, |_, index| {
+        index
+            .update_source_schedule(source_id, interval_minutes, enabled)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("source {source_id} not found"))
+    })
+}
+
+#[tauri::command]
+fn list_due_sources(state: State<'_, AppState>) -> Result<Vec<SourceRow>, String> {
+    with_vault(&state, |_, index| {
+        find_due_sources(index).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn get_schedule_status(state: State<'_, AppState>) -> Result<Vec<ScheduleStatus>, String> {
+    with_vault(&state, |_, index| {
+        schedule_status(index).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn list_fetch_runs(
+    state: State<'_, AppState>,
+    source_id: Option<i64>,
+    limit: Option<i64>,
+) -> Result<Vec<FetchRunRow>, String> {
+    with_vault(&state, |_, index| {
+        list_run_history(index, source_id, limit.unwrap_or(25)).map_err(|e| e.to_string())
+    })
+}
+
+/// Refresh every source whose interval has elapsed (launch catch-up / background tick).
+#[tauri::command]
+async fn catch_up_due_sources(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<FetchReport>, String> {
+    let due = with_vault(&state, |_, index| {
+        find_due_sources(index).map_err(|e| e.to_string())
+    })?;
+
+    let mut reports = Vec::new();
+    for source in due {
+        let report = refresh_source(app.clone(), state.clone(), source.id, None).await?;
+        reports.push(report);
+    }
+    Ok(reports)
 }
 
 #[tauri::command]
@@ -288,6 +351,11 @@ pub fn run() {
             add_source,
             refresh_source,
             remove_source,
+            update_source_schedule,
+            list_due_sources,
+            get_schedule_status,
+            list_fetch_runs,
+            catch_up_due_sources,
             list_articles,
             get_article,
             set_article_state,

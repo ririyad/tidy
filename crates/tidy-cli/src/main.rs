@@ -1,7 +1,10 @@
 use std::{env, path::PathBuf, process};
 
 use anyhow::{Context, Result, bail};
-use tidy_core::{CrawlLimits, DiscoverOptions, FetchOptions, Vault, discover, fetch, parse_prefix};
+use tidy_core::{
+    CrawlLimits, DiscoverOptions, FetchOptions, Index, Vault, discover, fetch, list_run_history,
+    parse_prefix, schedule_status,
+};
 
 #[tokio::main]
 async fn main() {
@@ -149,6 +152,7 @@ async fn run() -> Result<()> {
                 download_images,
                 title: None,
                 backfill_policy: None,
+                interval_minutes: None,
             })
             .await
             .context("fetch failed")?;
@@ -192,6 +196,93 @@ async fn run() -> Result<()> {
             }
             Ok(())
         }
+        "schedule" => {
+            let mut vault = None;
+            let mut json = false;
+            let mut runs = false;
+            let mut source_id = None;
+            let mut limit = 20i64;
+
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--vault" => {
+                        let value = args.next().context("--vault requires a path")?;
+                        vault = Some(PathBuf::from(value));
+                    }
+                    "--json" => json = true,
+                    "--runs" => runs = true,
+                    "--source" => {
+                        let value = args.next().context("--source requires an id")?;
+                        source_id = Some(value.parse::<i64>().context("invalid --source")?);
+                    }
+                    "--limit" => {
+                        let value = args.next().context("--limit requires a number")?;
+                        limit = value.parse::<i64>().context("invalid --limit")?;
+                    }
+                    other => bail!("unknown flag `{other}`"),
+                }
+            }
+
+            let vault_path = vault.context(
+                "usage: tidy schedule --vault PATH [--runs] [--source ID] [--limit N] [--json]",
+            )?;
+            let vault = Vault::open(&vault_path)
+                .with_context(|| format!("failed to open vault at {}", vault_path.display()))?;
+            let index = Index::open(vault.database_path()).context("failed to open index")?;
+
+            if runs {
+                let history = list_run_history(&index, source_id, limit)
+                    .context("failed to list fetch runs")?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&history)
+                            .context("failed to serialize runs")?
+                    );
+                } else if history.is_empty() {
+                    println!("No fetch runs yet.");
+                } else {
+                    for run in history {
+                        println!(
+                            "#{:<4} {:<20} {:<8} +{}/~{}/={}/!{}  {}",
+                            run.id,
+                            run.source_title,
+                            run.status,
+                            run.added,
+                            run.updated,
+                            run.skipped,
+                            run.failed,
+                            run.started_at
+                        );
+                    }
+                }
+            } else {
+                let statuses =
+                    schedule_status(&index).context("failed to load schedule status")?;
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&statuses)
+                            .context("failed to serialize schedule")?
+                    );
+                } else if statuses.is_empty() {
+                    println!("No sources registered.");
+                } else {
+                    for item in statuses {
+                        let due = if item.due { "due" } else { "ok" };
+                        let enabled = if item.enabled { "on" } else { "off" };
+                        println!(
+                            "#{:<4} {:<24} every {:>4}m  [{enabled}] [{due}]  last {}",
+                            item.source_id,
+                            item.title,
+                            item.interval_minutes,
+                            item.last_fetch_at.as_deref().unwrap_or("never")
+                        );
+                    }
+                }
+            }
+            Ok(())
+        }
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
@@ -221,8 +312,14 @@ COMMANDS:
         --limit N               Cap articles fetched
         --no-images             Skip downloading images
         --json                  Emit machine-readable JSON
+    schedule --vault PATH       Show per-source intervals and due status
+        --runs                  Show recent fetch run history
+        --source ID             Filter runs to one source
+        --limit N               Cap history rows (default 20)
+        --json                  Emit machine-readable JSON
     help                        Show this help
 
 Discovery order: feed → sitemap → HTML crawl fallback.
 Extraction: readability → markdown + frontmatter → SQLite index.
+Scheduler: due sources = enabled and (never fetched or interval elapsed).
 ";
