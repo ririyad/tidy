@@ -2,6 +2,12 @@
 
 All notable changes to Tidy are documented here.
 
+## [0.1.1] — 2026-07-26
+
+### Fixed
+
+- Run `svelte-kit sync` before typecheck so fresh CI checkouts (without `.svelte-kit/`) pass
+
 ## [0.1.0] — 2026-07-26
 
 First tagged release. Milestones **M0–M3** are in place: vault + fetch engine + desktop reader.
@@ -25,4 +31,5 @@ First tagged release. Milestones **M0–M3** are in place: vault + fetch engine 
 - Highlights and notes (**M6**)
 - Onboarding polish, Intel Mac / Windows / Linux packages, signing (**M7+**)
 
+[0.1.1]: https://github.com/ririyad/tidy/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ririyad/tidy/releases/tag/v0.1.0
