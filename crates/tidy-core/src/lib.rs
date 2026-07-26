@@ -5,6 +5,8 @@ mod fetch;
 mod http;
 mod index;
 mod robots;
+mod settings;
+mod state;
 mod vault;
 
 pub use discover::{
@@ -17,11 +19,16 @@ pub use extract::{
     QualityLabel,
 };
 pub use fetch::{
-    fetch, source_slug, ArticleFrontMatter, FetchOptions, FetchReport, FetchStatus,
+    fetch, fetch_with_progress, source_slug, ArticleFrontMatter, FetchOptions, FetchProgress,
+    FetchReport, FetchStatus,
 };
 pub use http::{FetchResponse, HttpClient, HttpClientConfig, USER_AGENT};
-pub use index::{ArticleRecord, Index, SourceRecord};
+pub use index::{
+    ArticleDetail, ArticleFilter, ArticleListItem, ArticleRecord, Index, SourceRecord, SourceRow,
+};
 pub use robots::{parse_robots, RobotsRules};
+pub use settings::{load_reader_settings, save_reader_settings, ReaderSettings};
+pub use state::{apply_article_state, ArticleStatePatch};
 pub use vault::{Vault, VaultError, VaultSummary};
 
 pub const APP_NAME: &str = "Tidy";
