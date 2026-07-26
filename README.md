@@ -36,5 +36,11 @@ docs/SPEC.md        # vault + frontmatter contracts
 
 ## Status
 
-Milestone **M0** — scaffold and contracts. Fetching, reader, and scheduling
-follow in later milestones. See `docs/SPEC.md`.
+Milestone **M1** — discovery engine. Use:
+
+```bash
+cargo run -p tidy-cli -- discover https://example.com/blog --limit 20
+```
+
+Order: feed → sitemap → HTML crawl fallback. Fetching and markdown extraction
+follow in M2. See `docs/SPEC.md`.
