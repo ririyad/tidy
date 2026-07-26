@@ -18,8 +18,8 @@ use crate::vault::Vault;
 pub use images::localize_images;
 pub use slug::{article_stem, source_slug};
 pub use writer::{
-    read_existing_frontmatter, write_article_file, ArticleFrontMatter, ExtractionInfo,
-    WriteOutcomeStatus,
+    parse_frontmatter, read_existing_frontmatter, render_document, write_article_file,
+    ArticleFrontMatter, ExtractionInfo, WriteOutcomeStatus,
 };
 
 #[derive(Debug, Clone)]
@@ -28,6 +28,8 @@ pub struct FetchOptions {
     pub vault: PathBuf,
     pub limit: Option<usize>,
     pub download_images: bool,
+    pub title: Option<String>,
+    pub backfill_policy: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -62,22 +64,58 @@ pub enum FetchStatus {
     Failed,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct FetchProgress {
+    pub source_id: i64,
+    pub phase: String,
+    pub current: usize,
+    pub total: usize,
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub message: String,
+}
+
 /// Discover posts under a prefix, extract them, write markdown, and index them.
 pub async fn fetch(options: FetchOptions) -> Result<FetchReport> {
+    fetch_with_progress(options, |_| {}).await
+}
+
+/// Same as [`fetch`], with a progress callback for UI updates.
+pub async fn fetch_with_progress<F>(mut options: FetchOptions, mut on_progress: F) -> Result<FetchReport>
+where
+    F: FnMut(FetchProgress),
+{
     let summary = Vault::initialize(&options.vault)?;
     let vault = Vault::open(&summary.path)?;
     let mut index = Index::open(vault.database_path())?;
 
     let slug = source_slug(&options.url_prefix);
+    let backfill = options
+        .backfill_policy
+        .clone()
+        .unwrap_or_else(|| "ask".into());
     let source = index.upsert_source(&SourceRecord {
         url_prefix: options.url_prefix.as_str().to_owned(),
-        title: slug.clone(),
+        title: options
+            .title
+            .clone()
+            .unwrap_or_else(|| slug.clone()),
         feed_url: None,
         discovery_mode: "auto".into(),
         interval_minutes: 360,
-        backfill_policy: "ask".into(),
+        backfill_policy: backfill,
         enabled: true,
     })?;
+
+    on_progress(FetchProgress {
+        source_id: source.id,
+        phase: "discover".into(),
+        current: 0,
+        total: 0,
+        url: None,
+        title: None,
+        message: format!("Discovering posts under {}", options.url_prefix),
+    });
 
     let mut client_config = HttpClientConfig::default();
     client_config.cache_dir = Some(vault.cache_dir());
@@ -109,7 +147,28 @@ pub async fn fetch(options: FetchOptions) -> Result<FetchReport> {
         warnings: discovery.warnings.clone(),
     };
 
-    for item in &discovery.urls {
+    let total = discovery.urls.len();
+    on_progress(FetchProgress {
+        source_id: source.id,
+        phase: "extract".into(),
+        current: 0,
+        total,
+        url: None,
+        title: None,
+        message: format!("Found {total} URLs"),
+    });
+
+    for (idx, item) in discovery.urls.iter().enumerate() {
+        on_progress(FetchProgress {
+            source_id: source.id,
+            phase: "extract".into(),
+            current: idx + 1,
+            total,
+            url: Some(item.url.to_string()),
+            title: item.title.clone(),
+            message: format!("Fetching {}", item.url),
+        });
+
         match fetch_one(
             &client,
             &vault,
@@ -158,6 +217,20 @@ pub async fn fetch(options: FetchOptions) -> Result<FetchReport> {
     )?;
     index.touch_source_fetch(source.id)?;
 
+    on_progress(FetchProgress {
+        source_id: source.id,
+        phase: "done".into(),
+        current: total,
+        total,
+        url: None,
+        title: None,
+        message: format!(
+            "Done — added {}, updated {}, skipped {}, failed {}",
+            report.added, report.updated, report.skipped, report.failed
+        ),
+    });
+
+    let _ = &mut options;
     Ok(report)
 }
 

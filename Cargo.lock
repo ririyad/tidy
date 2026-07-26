@@ -4217,6 +4217,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tidy-core",
+ "url",
 ]
 
 [[package]]

@@ -150,6 +150,8 @@ async fn run() -> Result<()> {
                 vault,
                 limit,
                 download_images,
+                title: None,
+                backfill_policy: None,
             })
             .await
             .context("fetch failed")?;
