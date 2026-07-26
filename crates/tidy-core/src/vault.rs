@@ -13,10 +13,11 @@ const DEFAULT_CONFIG: &str = r#"# Tidy vault configuration
 schema_version = 1
 
 [reader]
-theme = "system"
+theme = "paper"
 font = "serif"
-font_size = 18
+font_size = 20
 line_height = 1.7
+measure = "narrow"
 "#;
 const DEFAULT_SOURCES: &str = "# Tidy sources\nschema_version = 1\nsources = []\n";
 
