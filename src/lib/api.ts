@@ -5,6 +5,7 @@ import type {
   ArticleQuery,
   FeedFilter,
   FetchRunRow,
+  HighlightRow,
   ReaderSettings,
   ScheduleStatus,
   SmartViewQuery,
@@ -72,6 +73,18 @@ export const api = {
     invoke<SmartViewRow>('save_smart_view', { request: payload }),
   deleteSmartView: (id: string) => invoke<boolean>('delete_smart_view', { id }),
   getArticle: (id: number) => invoke<ArticleDetail | null>('get_article', { id }),
+  addHighlight: (payload: {
+    article_id: number;
+    text: string;
+    note?: string | null;
+    prefix?: string | null;
+    suffix?: string | null;
+  }) => invoke<HighlightRow>('add_article_highlight', { request: payload }),
+  updateHighlightNote: (id: string, note?: string | null) =>
+    invoke<HighlightRow>('update_article_highlight_note', { id, note: note ?? null }),
+  deleteHighlight: (id: string) => invoke<boolean>('delete_article_highlight', { id }),
+  listHighlights: (articleId?: number | null) =>
+    invoke<HighlightRow[]>('list_article_highlights', { articleId: articleId ?? null }),
   setArticleState: (payload: {
     id: number;
     state?: string;

@@ -153,6 +153,22 @@ select:focus-visible {
   color: var(--reader-muted);
 }
 
+.reader-content mark.tidy-highlight {
+  background: rgb(29 107 115 / 22%);
+  color: inherit;
+  border-radius: 0.15em;
+  padding: 0 0.05em;
+  cursor: help;
+}
+
+.reader-theme-ink .reader-content mark.tidy-highlight {
+  background: rgb(125 211 220 / 28%);
+}
+
+.reader-theme-sepia .reader-content mark.tidy-highlight {
+  background: rgb(180 120 60 / 28%);
+}
+
 .feed-item {
   content-visibility: auto;
   contain-intrinsic-size: 0 5.5rem;

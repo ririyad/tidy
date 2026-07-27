@@ -65,6 +65,17 @@ export type ArticleDetail = ArticleListItem & {
   rendered_html: string;
   progress: number;
   revision: number;
+  highlights: HighlightRow[];
+};
+
+export type HighlightRow = {
+  id: string;
+  article_id: number;
+  text: string;
+  note: string | null;
+  prefix: string;
+  suffix: string;
+  created_at: string;
 };
 
 export type ReaderSettings = {

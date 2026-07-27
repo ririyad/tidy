@@ -510,6 +510,25 @@
       onToggleArchive={() =>
         article && scheduleState({ id: article.id, archived: !article.archived })}
       onProgress={scheduleProgress}
+      onAddHighlight={async (payload) => {
+        if (!article) return;
+        await api.addHighlight({
+          article_id: article.id,
+          text: payload.text,
+          note: payload.note,
+          prefix: payload.prefix,
+          suffix: payload.suffix
+        });
+        article = await api.getArticle(article.id);
+      }}
+      onUpdateHighlightNote={async (id, note) => {
+        await api.updateHighlightNote(id, note);
+        if (article) article = await api.getArticle(article.id);
+      }}
+      onDeleteHighlight={async (id) => {
+        await api.deleteHighlight(id);
+        if (article) article = await api.getArticle(article.id);
+      }}
     />
   </div>
 

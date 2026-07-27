@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { clamp } from '../format';
-  import type { ArticleDetail, ReaderSettings } from '../types';
+  import { applyHighlights, readSelectionQuote, type SelectionQuote } from '../highlights';
+  import type { ArticleDetail, HighlightRow, ReaderSettings } from '../types';
 
   let {
     article,
@@ -9,7 +11,10 @@
     onToggleRead,
     onToggleStar,
     onToggleArchive,
-    onProgress
+    onProgress,
+    onAddHighlight,
+    onUpdateHighlightNote,
+    onDeleteHighlight
   }: {
     article: ArticleDetail | null;
     settings: ReaderSettings;
@@ -18,9 +23,28 @@
     onToggleStar: () => void;
     onToggleArchive: () => void;
     onProgress: (progress: number) => void;
+    onAddHighlight: (payload: {
+      text: string;
+      note?: string | null;
+      prefix?: string | null;
+      suffix?: string | null;
+    }) => Promise<void>;
+    onUpdateHighlightNote: (id: string, note: string | null) => Promise<void>;
+    onDeleteHighlight: (id: string) => Promise<void>;
   } = $props();
 
   let scroller: HTMLElement | undefined = $state();
+  let contentRoot: HTMLElement | undefined = $state();
+  let pending = $state<SelectionQuote | null>(null);
+  let noteDraft = $state('');
+  let busy = $state(false);
+
+  $effect(() => {
+    const highlights = article?.highlights ?? [];
+    void tick().then(() => {
+      if (contentRoot) applyHighlights(contentRoot, highlights);
+    });
+  });
 
   function updateSetting<K extends keyof ReaderSettings>(key: K, value: ReaderSettings[K]) {
     onSettings({ ...settings, [key]: value });
@@ -32,10 +56,48 @@
     const progress = max <= 0 ? 1 : clamp(scroller.scrollTop / max, 0, 1);
     onProgress(progress);
   }
+
+  function onMouseUp() {
+    if (!contentRoot || !article) return;
+    const quote = readSelectionQuote(contentRoot);
+    if (!quote) return;
+    pending = quote;
+    noteDraft = '';
+  }
+
+  async function saveHighlight() {
+    if (!pending || !article || busy) return;
+    busy = true;
+    try {
+      await onAddHighlight({
+        text: pending.text,
+        note: noteDraft.trim() || null,
+        prefix: pending.prefix,
+        suffix: pending.suffix
+      });
+      pending = null;
+      noteDraft = '';
+      window.getSelection()?.removeAllRanges();
+    } finally {
+      busy = false;
+    }
+  }
+
+  function cancelPending() {
+    pending = null;
+    noteDraft = '';
+    window.getSelection()?.removeAllRanges();
+  }
+
+  async function editNote(highlight: HighlightRow) {
+    const next = window.prompt('Note for highlight', highlight.note ?? '');
+    if (next === null) return;
+    await onUpdateHighlightNote(highlight.id, next.trim() || null);
+  }
 </script>
 
 <section
-  class="reader-theme-{settings.theme} flex h-full min-w-0 flex-col"
+  class="reader-theme-{settings.theme} relative flex h-full min-w-0 flex-col"
   style="background: var(--reader-bg); color: var(--reader-fg);"
 >
   {#if !article}
@@ -52,6 +114,7 @@
           <kbd class="rounded bg-black/5 px-1.5 py-0.5 text-xs">k</kbd> to move,
           <kbd class="rounded bg-black/5 px-1.5 py-0.5 text-xs">o</kbd> to open,
           <kbd class="rounded bg-black/5 px-1.5 py-0.5 text-xs">s</kbd> to star.
+          Select text to highlight.
         </p>
       </div>
     </div>
@@ -145,10 +208,76 @@
             ? new Date(article.published_at).toLocaleString()
             : new Date(article.fetched_at).toLocaleString()}
         </p>
-        <div class="reader-content mt-8">
+        <div
+          class="reader-content mt-8"
+          role="document"
+          bind:this={contentRoot}
+          onmouseup={onMouseUp}
+        >
           {@html article.rendered_html}
         </div>
+
+        {#if article.highlights.length > 0}
+          <section class="mt-12 border-t border-black/10 pt-6">
+            <p
+              class="text-xs font-semibold tracking-[0.14em] uppercase"
+              style="color: var(--reader-muted)"
+            >
+              Highlights
+            </p>
+            <ul class="mt-4 space-y-4">
+              {#each article.highlights as highlight}
+                <li class="rounded-2xl border border-black/10 bg-black/[0.03] px-4 py-3">
+                  <blockquote class="text-[0.95em] leading-relaxed italic">
+                    “{highlight.text}”
+                  </blockquote>
+                  {#if highlight.note}
+                    <p class="mt-2 text-sm" style="color: var(--reader-muted)">{highlight.note}</p>
+                  {/if}
+                  <div class="mt-3 flex gap-3 text-xs">
+                    <button class="hover:underline" onclick={() => editNote(highlight)}>
+                      {highlight.note ? 'Edit note' : 'Add note'}
+                    </button>
+                    <button class="hover:underline" onclick={() => onDeleteHighlight(highlight.id)}>
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
       </article>
     </div>
+
+    {#if pending}
+      <div
+        class="fixed z-30 w-72 rounded-2xl border border-black/10 bg-white p-3 shadow-xl"
+        style="left: {Math.min(pending.rect.left, window.innerWidth - 300)}px; top: {Math.min(
+          pending.rect.bottom + 8,
+          window.innerHeight - 180
+        )}px;"
+      >
+        <p class="line-clamp-3 text-sm italic text-[var(--ink-soft)]">“{pending.text}”</p>
+        <textarea
+          class="mt-2 w-full rounded-xl border border-black/10 px-2 py-1.5 text-sm"
+          rows="2"
+          placeholder="Optional note"
+          bind:value={noteDraft}
+        ></textarea>
+        <div class="mt-2 flex justify-end gap-2">
+          <button class="rounded-lg px-2.5 py-1.5 text-sm hover:bg-black/5" onclick={cancelPending}>
+            Cancel
+          </button>
+          <button
+            class="rounded-lg bg-[var(--ink)] px-2.5 py-1.5 text-sm font-semibold text-[var(--paper)] disabled:opacity-60"
+            onclick={saveHighlight}
+            disabled={busy}
+          >
+            Highlight
+          </button>
+        </div>
+      </div>
+    {/if}
   {/if}
 </section>
