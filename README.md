@@ -57,12 +57,17 @@ cargo run -p tidy-cli -- fetch https://example.com/blog --vault ~/Tidy --limit 5
 # Show schedule / due status and recent fetch runs
 cargo run -p tidy-cli -- schedule --vault ~/Tidy
 cargo run -p tidy-cli -- schedule --vault ~/Tidy --runs
+
+# Full-text search, tag filter, and saved smart views
+cargo run -p tidy-cli -- search --vault ~/Tidy "async rust"
+cargo run -p tidy-cli -- search --vault ~/Tidy --tag source/example --filter starred
 ```
 
 In the app: choose a vault → **Add** a source (recent or full backfill, refresh interval)
 → browse the Information Feed → read with typography controls. Due sources catch up on
 launch. Keyboard: `j`/`k` move, `o` open, `u` read/unread, `s` star, `e` archive, `r`
-refresh, `g f` inbox, `/` add source.
+refresh, `g f` inbox, `/` focus search. Sidebar tags and smart views filter the feed;
+**Save** stores the current filter + search as a reusable view.
 
 ## Workspace layout
 
@@ -83,14 +88,14 @@ docs/SPEC.md        # vault + frontmatter + scheduler contracts
 | **M2** Extraction | Done | Readability → markdown, images, atomic vault writes, change detection, `tidy fetch` |
 | **M3** Reader UI | Done | Source CRUD, live refresh progress, day-grouped feed, reader themes, keyboard nav |
 | **M4** Scheduler | Done | Per-source intervals, launch catch-up, run history |
-| **M5** Search | Next | FTS5 search, tags, smart views |
-| **M6** Highlights | Planned | Anchored highlights + notes |
+| **M5** Search | Done | FTS5 search, tags, smart views |
+| **M6** Highlights | Next | Anchored highlights + notes |
 | **M7** Polish | Planned | Onboarding, overrides, packaging |
 
-### Current: M4
+### Current: M5
 
-Enabled sources refresh on their interval. Opening a vault catches up anything due;
-while the app stays open a one-minute tick does the same. Each source shows interval,
-last fetch, pause/resume, and recent run history. CLI: `tidy schedule --vault PATH`.
+Search the index from the feed header (FTS5 over title, excerpt, and body). Tags from
+fetch land in the sidebar (`source/<slug>` plus feed metadata when available). Save the
+current filter, tag, source, and search as a **smart view**. CLI: `tidy search --vault PATH`.
 
 See `docs/SPEC.md` for the vault and frontmatter contract.

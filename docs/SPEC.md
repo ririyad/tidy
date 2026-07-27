@@ -82,6 +82,20 @@ Tables:
 - `highlights` — query mirror of frontmatter highlights
 - `smart_views` — saved rule-based views
 
+Smart view `query_json` shape:
+
+```json
+{
+  "filter": "inbox",
+  "tag": "source/example",
+  "query": "optional fts terms",
+  "source_id": null
+}
+```
+
+Search uses the `articles_fts` FTS5 table (`title`, `excerpt`, `body`). User queries are
+tokenized and matched with OR semantics. Combine search with inbox/starred filters and tags.
+
 `PRAGMA user_version = 1` tracks the applied schema revision.
 
 ## Scheduler (M4)
@@ -93,6 +107,13 @@ Tables:
 - `fetch_runs` stores per-run counts for history UI / `tidy schedule --runs`
 
 Manual **Refresh** always fetches the selected source (or all enabled sources).
+
+## Search (M5)
+
+- Feed header search box queries `articles_fts` (title, excerpt, body)
+- Tags from fetch appear in the sidebar; click to filter
+- **Smart views** persist filter + tag + source + search as JSON in `smart_views`
+- CLI: `tidy search --vault PATH [--filter inbox] [--tag TAG] [QUERY...]`
 
 ## Initialization
 

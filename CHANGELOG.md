@@ -2,6 +2,13 @@
 
 All notable changes to Tidy are documented here.
 
+## Unreleased
+
+### Added
+
+- **M5 Search** — FTS5 full-text search, tag sidebar filters, saved smart views
+- CLI `tidy search` for headless queries against the vault index
+
 ## [0.2.1] — 2026-07-27
 
 ### Changed
