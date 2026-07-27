@@ -45,7 +45,7 @@
   });
   let showAdd = $state(false);
   let onboardingStep = $state<'welcome' | 'help' | null>(null);
-  let appVersion = $state('0.5.0');
+  let appVersion = $state('0.5.1');
   let fetching = $state(false);
   let progressMessage = $state('');
   let fetchRuns = $state<FetchRunRow[]>([]);
@@ -109,10 +109,13 @@
     await reloadArticles();
     await reloadFetchRuns();
     startScheduleTicker();
-    void catchUp();
     if (options?.showWelcome || (vault?.created && sources.length === 0)) {
       onboardingStep = 'welcome';
     }
+    // Defer catch-up so the shell can paint before network work starts.
+    queueMicrotask(() => {
+      void catchUp({ quiet: true });
+    });
   }
 
   async function reloadTags() {

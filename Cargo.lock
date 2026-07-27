@@ -4209,7 +4209,7 @@ dependencies = [
 
 [[package]]
 name = "tidy"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -4222,7 +4222,7 @@ dependencies = [
 
 [[package]]
 name = "tidy-cli"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "serde_json",
@@ -4232,7 +4232,7 @@ dependencies = [
 
 [[package]]
 name = "tidy-core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "chrono",
  "dom_smoothie",

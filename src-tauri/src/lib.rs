@@ -46,19 +46,21 @@ fn remember_vault(app: &tauri::AppHandle, path: &std::path::Path) -> Result<(), 
 }
 
 #[tauri::command]
-fn select_vault(
+async fn select_vault(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<VaultSummary>, String> {
     use tauri_plugin_dialog::DialogExt;
 
-    let path = app
+    // Must be async: blocking dialog APIs deadlock the macOS event loop when
+    // invoked from a sync command (beach-ball hang after "Choose vault").
+    let folder = app
         .dialog()
         .file()
         .set_title("Choose a Tidy vault folder")
         .blocking_pick_folder();
 
-    let Some(file_path) = path else {
+    let Some(file_path) = folder else {
         return Ok(None);
     };
 
@@ -66,19 +68,26 @@ fn select_vault(
         .into_path()
         .map_err(|error| format!("invalid vault path: {error}"))?;
 
-    let summary = Vault::initialize(&path).map_err(|e| e.to_string())?;
+    let summary = tauri::async_runtime::spawn_blocking(move || Vault::initialize(path))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|e| e.to_string())?;
+
     *state.vault_path.lock().map_err(|e| e.to_string())? = Some(summary.path.clone());
     remember_vault(&app, &summary.path)?;
     Ok(Some(summary))
 }
 
 #[tauri::command]
-fn open_vault_path(
+async fn open_vault_path(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     path: String,
 ) -> Result<VaultSummary, String> {
-    let summary = Vault::initialize(PathBuf::from(path)).map_err(|e| e.to_string())?;
+    let summary = tauri::async_runtime::spawn_blocking(move || Vault::initialize(PathBuf::from(path)))
+        .await
+        .map_err(|error| error.to_string())?
+        .map_err(|e| e.to_string())?;
     *state.vault_path.lock().map_err(|e| e.to_string())? = Some(summary.path.clone());
     remember_vault(&app, &summary.path)?;
     Ok(summary)
@@ -487,7 +496,7 @@ fn update_source_overrides(
 }
 
 #[tauri::command]
-fn backup_open_vault(
+async fn backup_open_vault(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<BackupReport>, String> {
@@ -505,11 +514,19 @@ fn backup_open_vault(
         .into_path()
         .map_err(|error| format!("invalid backup path: {error}"))?;
 
-    with_vault(&state, |vault, _| {
-        backup_vault(vault, parent)
-            .map(Some)
-            .map_err(|e| e.to_string())
+    let vault_path = {
+        let guard = state.vault_path.lock().map_err(|e| e.to_string())?;
+        guard
+            .clone()
+            .ok_or_else(|| "no vault open — choose a vault first".to_string())?
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let vault = Vault::open(&vault_path).map_err(|e| e.to_string())?;
+        backup_vault(&vault, parent).map(Some).map_err(|e| e.to_string())
     })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]

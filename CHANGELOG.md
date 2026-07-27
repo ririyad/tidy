@@ -2,6 +2,12 @@
 
 All notable changes to Tidy are documented here.
 
+## [0.5.1] — 2026-07-27
+
+### Fixed
+
+- macOS beach-ball hang when choosing a vault (async folder dialog + deferred catch-up)
+
 ## [0.5.0] — 2026-07-27
 
 ### Added
