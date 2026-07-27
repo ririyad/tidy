@@ -1,14 +1,15 @@
-use std::{path::PathBuf, sync::Mutex};
+use std::{fs, path::PathBuf, sync::Mutex};
 
 use serde::Serialize;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 use tidy_core::{
-    ArticleDetail, ArticleFilter, ArticleListItem, ArticleQuery, ArticleStatePatch, FetchOptions,
-    FetchProgress, FetchReport, FetchRunRow, HighlightInput, HighlightRow, Index, ReaderSettings,
-    ScheduleStatus, SmartViewQuery, SmartViewRow, SourceRow, TagCount, Vault, VaultSummary,
-    add_highlight, apply_article_state, delete_highlight, fetch_with_progress,
-    list_due_sources as find_due_sources, list_highlights, list_run_history, load_reader_settings,
-    parse_prefix, save_reader_settings, schedule_status, source_slug, update_highlight_note,
+    ArticleDetail, ArticleFilter, ArticleListItem, ArticleQuery, ArticleStatePatch, BackupReport,
+    FetchOptions, FetchProgress, FetchReport, FetchRunRow, HighlightInput, HighlightRow, Index,
+    ReaderSettings, ReindexReport, ScheduleStatus, SmartViewQuery, SmartViewRow, SourceOverrides,
+    SourceRow, TagCount, Vault, VaultSummary, add_highlight, apply_article_state, backup_vault,
+    delete_highlight, fetch_with_progress, list_due_sources as find_due_sources, list_highlights,
+    list_run_history, load_reader_settings, parse_prefix, reindex_vault, save_reader_settings,
+    schedule_status, source_slug, update_highlight_note,
 };
 use url::Url;
 
@@ -28,6 +29,20 @@ fn with_vault<T>(
     let vault = Vault::open(path).map_err(|e| e.to_string())?;
     let index = Index::open(vault.database_path()).map_err(|e| e.to_string())?;
     f(&vault, &index)
+}
+
+fn last_vault_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("app data dir: {error}"))?;
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    Ok(dir.join("last_vault.txt"))
+}
+
+fn remember_vault(app: &tauri::AppHandle, path: &std::path::Path) -> Result<(), String> {
+    let file = last_vault_file(app)?;
+    fs::write(&file, path.display().to_string()).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -53,14 +68,34 @@ fn select_vault(
 
     let summary = Vault::initialize(&path).map_err(|e| e.to_string())?;
     *state.vault_path.lock().map_err(|e| e.to_string())? = Some(summary.path.clone());
+    remember_vault(&app, &summary.path)?;
     Ok(Some(summary))
 }
 
 #[tauri::command]
-fn open_vault_path(state: State<'_, AppState>, path: String) -> Result<VaultSummary, String> {
+fn open_vault_path(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<VaultSummary, String> {
     let summary = Vault::initialize(PathBuf::from(path)).map_err(|e| e.to_string())?;
     *state.vault_path.lock().map_err(|e| e.to_string())? = Some(summary.path.clone());
+    remember_vault(&app, &summary.path)?;
     Ok(summary)
+}
+
+#[tauri::command]
+fn get_last_vault_path(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let file = last_vault_file(&app)?;
+    if !file.exists() {
+        return Ok(None);
+    }
+    let path = fs::read_to_string(&file).map_err(|error| error.to_string())?;
+    let path = path.trim();
+    if path.is_empty() || !PathBuf::from(path).is_dir() {
+        return Ok(None);
+    }
+    Ok(Some(path.to_owned()))
 }
 
 #[tauri::command]
@@ -256,6 +291,7 @@ fn list_articles(
         "starred" => ArticleFilter::Starred,
         "archived" => ArticleFilter::Archived,
         "all" => ArticleFilter::All,
+        "review" => ArticleFilter::Review,
         _ => ArticleFilter::Inbox,
     };
     let query = ArticleQuery {
@@ -436,15 +472,64 @@ fn set_reader_settings(
     })
 }
 
+#[tauri::command]
+fn update_source_overrides(
+    state: State<'_, AppState>,
+    source_id: i64,
+    overrides: SourceOverrides,
+) -> Result<SourceRow, String> {
+    with_vault(&state, |_, index| {
+        index
+            .update_source_overrides(source_id, &overrides)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("source {source_id} not found"))
+    })
+}
+
+#[tauri::command]
+fn backup_open_vault(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<BackupReport>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let destination = app
+        .dialog()
+        .file()
+        .set_title("Choose a folder for the vault backup")
+        .blocking_pick_folder();
+    let Some(file_path) = destination else {
+        return Ok(None);
+    };
+    let parent = file_path
+        .into_path()
+        .map_err(|error| format!("invalid backup path: {error}"))?;
+
+    with_vault(&state, |vault, _| {
+        backup_vault(vault, parent)
+            .map(Some)
+            .map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn reindex_open_vault(state: State<'_, AppState>) -> Result<ReindexReport, String> {
+    with_vault(&state, |vault, _| {
+        reindex_vault(vault).map_err(|e| e.to_string())
+    })
+}
+
 #[derive(Serialize)]
 struct AppInfo {
     name: String,
+    version: String,
 }
 
 #[tauri::command]
 fn get_app_info() -> AppInfo {
     AppInfo {
         name: tidy_core::APP_NAME.to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
     }
 }
 
@@ -458,12 +543,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             select_vault,
             open_vault_path,
+            get_last_vault_path,
             get_open_vault,
             list_sources,
             add_source,
             refresh_source,
             remove_source,
             update_source_schedule,
+            update_source_overrides,
             list_due_sources,
             get_schedule_status,
             list_fetch_runs,
@@ -482,6 +569,8 @@ pub fn run() {
             set_article_progress,
             get_reader_settings,
             set_reader_settings,
+            backup_open_vault,
+            reindex_open_vault,
             get_app_info
         ])
         .run(tauri::generate_context!())

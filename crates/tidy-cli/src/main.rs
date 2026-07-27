@@ -3,7 +3,8 @@ use std::{env, path::PathBuf, process};
 use anyhow::{Context, Result, bail};
 use tidy_core::{
     ArticleFilter, ArticleQuery, CrawlLimits, DiscoverOptions, FetchOptions, Index, Vault,
-    discover, fetch, list_highlights, list_run_history, parse_prefix, schedule_status,
+    backup_vault, discover, fetch, list_highlights, list_run_history, parse_prefix, reindex_vault,
+    schedule_status,
 };
 
 #[tokio::main]
@@ -67,6 +68,7 @@ async fn run() -> Result<()> {
                 limit,
                 cache_dir,
                 limits: CrawlLimits::default(),
+                overrides: Default::default(),
             })
             .await
             .context("discovery failed")?;
@@ -366,6 +368,59 @@ async fn run() -> Result<()> {
             }
             Ok(())
         }
+        "backup" => {
+            let mut vault = None;
+            let mut out = None;
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--vault" => {
+                        vault = Some(PathBuf::from(
+                            args.next().context("--vault requires a path")?,
+                        ));
+                    }
+                    "--out" => {
+                        out = Some(PathBuf::from(args.next().context("--out requires a path")?));
+                    }
+                    other => bail!("unknown flag `{other}`"),
+                }
+            }
+            let vault_path = vault.context("usage: tidy backup --vault PATH [--out DIR]")?;
+            let out = out.unwrap_or_else(|| PathBuf::from("."));
+            let vault = Vault::open(&vault_path)
+                .with_context(|| format!("failed to open vault at {}", vault_path.display()))?;
+            let report = backup_vault(&vault, out).context("backup failed")?;
+            println!(
+                "Backup written to {} ({} files)",
+                report.destination.display(),
+                report.copied_files
+            );
+            Ok(())
+        }
+        "reindex" => {
+            let mut vault = None;
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--vault" => {
+                        vault = Some(PathBuf::from(
+                            args.next().context("--vault requires a path")?,
+                        ));
+                    }
+                    other => bail!("unknown flag `{other}`"),
+                }
+            }
+            let vault_path = vault.context("usage: tidy reindex --vault PATH")?;
+            let vault = Vault::open(&vault_path)
+                .with_context(|| format!("failed to open vault at {}", vault_path.display()))?;
+            let report = reindex_vault(&vault).context("reindex failed")?;
+            println!(
+                "Reindexed: scanned {}, upserted {}, skipped {}, failed {}",
+                report.scanned, report.upserted, report.skipped, report.failed
+            );
+            for warning in report.warnings {
+                eprintln!("warning: {warning}");
+            }
+            Ok(())
+        }
         "highlights" => {
             let mut vault = None;
             let mut article_id = None;
@@ -475,6 +530,9 @@ COMMANDS:
     highlights --vault PATH     List anchored highlights and notes
         [--article ID]          Limit to one article
         [--json]                Emit machine-readable JSON
+    backup --vault PATH         Copy Sources/attachments/config to a folder
+        [--out DIR]             Destination parent (default: .)
+    reindex --vault PATH        Rebuild SQLite from markdown on disk
     help                        Show this help
 
 Discovery order: feed → sitemap → HTML crawl fallback.
