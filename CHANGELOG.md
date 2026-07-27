@@ -2,6 +2,13 @@
 
 All notable changes to Tidy are documented here.
 
+## [0.2.1] — 2026-07-27
+
+### Changed
+
+- Release workflow aligned with CourseLib-style publish (auto-generated notes, three-platform matrix)
+- Windows x64 NSIS installer added to GitHub Releases
+
 ## [0.2.0] — 2026-07-26
 
 ### Added
@@ -39,6 +46,7 @@ First tagged release. Milestones **M0–M3** are in place: vault + fetch engine 
 - Live fetch progress events and keyboard navigation
 - CI and release packaging for **macOS Apple Silicon** (`aarch64-apple-darwin`)
 
+[0.2.1]: https://github.com/ririyad/tidy/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ririyad/tidy/releases/tag/v0.2.0
 [0.1.1]: https://github.com/ririyad/tidy/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ririyad/tidy/releases/tag/v0.1.0

@@ -13,26 +13,27 @@ with a calm reading interface.
 
 ## Releases
 
-Distribution is **unsigned** macOS `.dmg` / `.app` artifacts for **Apple Silicon and Intel**
-on [GitHub Releases](https://github.com/ririyad/tidy/releases) (built by the `v*` tag workflow).
-See [CHANGELOG.md](CHANGELOG.md).
+Desktop builds for **macOS (Apple Silicon + Intel)** and **Windows (x64)** are published on
+[GitHub Releases](https://github.com/ririyad/tidy/releases). Each release attaches `.dmg` /
+`.app.tar.gz` (macOS) and an NSIS `.exe` (Windows).
 
-CI on `main` / PRs runs checks on Apple Silicon and builds Tauri for both
-`aarch64-apple-darwin` and `x86_64-apple-darwin`.
+| Platform | Asset |
+| --- | --- |
+| Apple Silicon | `Tidy_*_aarch64.dmg` |
+| Intel Mac | `Tidy_*_x64.dmg` |
+| Windows | `Tidy_*_x64-setup.exe` |
 
-### First open after downloading the DMG
-
-Chrome/Safari mark GitHub downloads with a quarantine flag. For an unsigned app, macOS
-then shows *“Tidy is damaged and can’t be opened”* — that is Gatekeeper, not a bad file.
-
-After dragging **Tidy** into **Applications**:
+Builds are unsigned. macOS browser downloads may show *“Tidy is damaged”* (Gatekeeper
+quarantine). Install without quarantine:
 
 ```bash
-xattr -cr /Applications/Tidy.app && open /Applications/Tidy.app
+curl -fsSL https://raw.githubusercontent.com/ririyad/tidy/main/scripts/install-macos.sh | bash
 ```
 
-That is the supported install path for unsigned GitHub releases. (Notarized builds would
-skip this step; we intentionally ship unsigned.)
+Or after a manual DMG install: `xattr -cr /Applications/Tidy.app && open /Applications/Tidy.app`
+
+Push a `v*` tag to trigger the [Release](https://github.com/ririyad/tidy/actions/workflows/release.yml)
+workflow (same layout as [CourseLib releases](https://github.com/ririyad/courselib/releases)).
 
 ## Development
 

@@ -1,3 +1,10 @@
+# Build Tidy desktop bundles and publish a GitHub Release.
+# Deploy log: Actions tab → this workflow run.
+# Trigger: push a version tag (v0.2.1) or run manually via workflow_dispatch.
+#
+# macOS: both arch jobs use macos-14 (Apple Silicon). arm64 builds natively;
+# x64 cross-compiles. Windows: native MSVC x64 NSIS installer (unsigned).
+
 name: Release
 
 on:
@@ -5,35 +12,39 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing release tag to build for (e.g. v0.2.0)"
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 jobs:
-  release-macos:
-    name: ${{ matrix.name }}
-    runs-on: macos-latest
+  publish-tauri:
+    name: Build ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: macOS Apple Silicon
+          - name: macOS arm64
+            platform: macos-14
             rust_target: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin
-          - name: macOS Intel
+            args: "--target aarch64-apple-darwin"
+          - name: macOS x64
+            platform: macos-14
             rust_target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+            args: "--target x86_64-apple-darwin"
+          - name: Windows x64
+            platform: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            args: "--target x86_64-pc-windows-msvc --bundles nsis"
 
-      - name: Setup Node.js
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: lts/*
@@ -47,52 +58,66 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: |
-            . -> target
-            ./src-tauri -> target
-          key: release-${{ matrix.rust_target }}
+          workspaces: "./src-tauri -> target"
+          shared-key: ${{ matrix.rust_target }}
 
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Resolve release tag
-        id: meta
+      - name: Resolve app version
+        id: version
+        shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-          echo "version=$(jq -r .version src-tauri/tauri.conf.json)" >> "$GITHUB_OUTPUT"
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "App version: $VERSION"
 
-      - name: Build and upload ${{ matrix.name }}
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="v${{ steps.version.outputs.version }}"
+          if BODY=$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            -f target_commitish="${{ github.sha }}" \
+            --jq .body 2>/dev/null); then
+            {
+              echo "body<<EOF"
+              echo "## Tidy $TAG"
+              echo
+              echo "Desktop builds for macOS (arm64/x64) and Windows (x64 NSIS) are attached below."
+              echo "macOS DMGs are unsigned; Gatekeeper may show a damaged-app warning after a browser download."
+              echo "Windows installers are currently unsigned; SmartScreen may show an Unknown Publisher warning."
+              echo "Open the **Actions → Release** run for this tag for the full deploy log."
+              echo
+              echo "$BODY"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "body<<EOF"
+              echo "## Tidy $TAG"
+              echo
+              echo "Desktop builds for macOS (arm64/x64) and Windows (x64 NSIS) are attached below."
+              echo "macOS DMGs are unsigned; Gatekeeper may show a damaged-app warning after a browser download."
+              echo "Windows installers are currently unsigned; SmartScreen may show an Unknown Publisher warning."
+              echo
+              echo "Deploy log: GitHub **Actions** → workflow **Release** for this tag."
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and publish
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ steps.meta.outputs.tag }}
-          releaseName: Tidy ${{ steps.meta.outputs.tag }}
-          releaseBody: |
-            Local-first desktop reader and fetch engine (Markdown vault + SQLite index).
-
-            ### Included in this release
-            - **M0–M3** Vault, discovery, extraction, Information Feed reader
-            - **M4** Per-source scheduler, launch catch-up, fetch run history
-
-            ### Platforms (unsigned)
-            - **Apple Silicon** — `Tidy_*_aarch64.dmg` / `.app.tar.gz`
-            - **Intel** — `Tidy_*_x64.dmg` / `.app.tar.gz`
-
-            Pick the DMG that matches your Mac (Apple menu → About This Mac).
-
-            **First open:** Gatekeeper may say the app is “damaged” after a browser download.
-            That is the quarantine flag on an unsigned build. After installing to Applications:
-
-            ```bash
-            xattr -cr /Applications/Tidy.app && open /Applications/Tidy.app
-            ```
-
-            See [CHANGELOG.md](https://github.com/ririyad/tidy/blob/main/CHANGELOG.md) for details.
+          tagName: v__VERSION__
+          releaseName: Tidy v__VERSION__
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
