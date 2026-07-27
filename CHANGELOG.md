@@ -2,6 +2,14 @@
 
 All notable changes to Tidy are documented here.
 
+## [0.4.0] — 2026-07-27
+
+### Added
+
+- **M6 Highlights** — TextQuote-anchored highlights with optional notes
+- Durable frontmatter `highlights` mirrored into SQLite
+- Reader selection popup + highlight list; CLI `tidy highlights`
+
 ## [0.3.0] — 2026-07-27
 
 ### Added

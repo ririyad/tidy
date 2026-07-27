@@ -61,13 +61,17 @@ cargo run -p tidy-cli -- schedule --vault ~/Tidy --runs
 # Full-text search, tag filter, and saved smart views
 cargo run -p tidy-cli -- search --vault ~/Tidy "async rust"
 cargo run -p tidy-cli -- search --vault ~/Tidy --tag source/example --filter starred
+
+# List highlights
+cargo run -p tidy-cli -- highlights --vault ~/Tidy
 ```
 
 In the app: choose a vault → **Add** a source (recent or full backfill, refresh interval)
 → browse the Information Feed → read with typography controls. Due sources catch up on
 launch. Keyboard: `j`/`k` move, `o` open, `u` read/unread, `s` star, `e` archive, `r`
 refresh, `g f` inbox, `/` focus search. Sidebar tags and smart views filter the feed;
-**Save** stores the current filter + search as a reusable view.
+**Save** stores the current filter + search as a reusable view. Select text in the
+reader to highlight and optionally annotate.
 
 ## Workspace layout
 
@@ -89,13 +93,13 @@ docs/SPEC.md        # vault + frontmatter + scheduler contracts
 | **M3** Reader UI | Done | Source CRUD, live refresh progress, day-grouped feed, reader themes, keyboard nav |
 | **M4** Scheduler | Done | Per-source intervals, launch catch-up, run history |
 | **M5** Search | Done | FTS5 search, tags, smart views |
-| **M6** Highlights | Next | Anchored highlights + notes |
-| **M7** Polish | Planned | Onboarding, overrides, packaging |
+| **M6** Highlights | Done | Anchored highlights + notes |
+| **M7** Polish | Next | Onboarding, overrides, packaging |
 
-### Current: M5
+### Current: M6
 
-Search the index from the feed header (FTS5 over title, excerpt, and body). Tags from
-fetch land in the sidebar (`source/<slug>` plus feed metadata when available). Save the
-current filter, tag, source, and search as a **smart view**. CLI: `tidy search --vault PATH`.
+Select text in the reader to save a highlight with an optional note. Quotes are
+anchored with surrounding context, stored in article frontmatter, and mirrored
+to SQLite. CLI: `tidy highlights --vault PATH`.
 
 See `docs/SPEC.md` for the vault and frontmatter contract.

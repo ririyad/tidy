@@ -59,13 +59,28 @@ extraction: { engine: dom_smoothie, quality: ok }
 | `starred` | yes | boolean |
 | `archived` | yes | boolean |
 | `tags` | yes | auto from source + feed metadata in v1 |
-| `highlights` | yes | added in M6; mirrored into SQLite for query |
+| `highlights` | yes | TextQuote anchors + optional note; mirrored into SQLite |
 | `content_hash` | yes | body change detection |
 | `revision` | yes | bumped when body changes on re-fetch |
 | scroll progress | no | SQLite only — never rewrite the file for scroll |
 
 Markdown body follows the YAML document. Images use relative links into
 `attachments/`.
+
+Highlight frontmatter entries:
+
+```yaml
+highlights:
+  - id: hl1a2b3c
+    text: "exact quote from the article"
+    note: "optional reader note"
+    prefix: "…context before…"
+    suffix: "…context after…"
+    created_at: 2026-07-27T15:30:00Z
+```
+
+Anchors use TextQuote-style `text` + `prefix`/`suffix` so they survive
+modest body reflows after re-fetch.
 
 ## SQLite schema (v1)
 
@@ -114,6 +129,13 @@ Manual **Refresh** always fetches the selected source (or all enabled sources).
 - Tags from fetch appear in the sidebar; click to filter
 - **Smart views** persist filter + tag + source + search as JSON in `smart_views`
 - CLI: `tidy search --vault PATH [--filter inbox] [--tag TAG] [QUERY...]`
+
+## Highlights (M6)
+
+- Select text in the reader to save a TextQuote-anchored highlight (+ optional note)
+- Highlights are durable in frontmatter and mirrored into the `highlights` table
+- Re-fetch preserves highlights from existing frontmatter
+- CLI: `tidy highlights --vault PATH [--article ID]`
 
 ## Initialization
 
