@@ -2,6 +2,15 @@
 
 All notable changes to Tidy are documented here.
 
+## [0.5.0] — 2026-07-27
+
+### Added
+
+- **M7 Polish** — first-run onboarding, last-vault reopen, shortcut help
+- Per-source extraction/crawl overrides (CSS selectors, max pages)
+- Review filter for `needs_review` articles
+- Vault backup and markdown reindex (app + CLI)
+
 ## [0.4.0] — 2026-07-27
 
 ### Added

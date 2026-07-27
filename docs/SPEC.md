@@ -111,7 +111,8 @@ Smart view `query_json` shape:
 Search uses the `articles_fts` FTS5 table (`title`, `excerpt`, `body`). User queries are
 tokenized and matched with OR semantics. Combine search with inbox/starred filters and tags.
 
-`PRAGMA user_version = 1` tracks the applied schema revision.
+`PRAGMA user_version = 2` tracks the applied schema revision (migration `0002_overrides`
+adds `sources.overrides_json`).
 
 ## Scheduler (M4)
 
@@ -136,6 +137,15 @@ Manual **Refresh** always fetches the selected source (or all enabled sources).
 - Highlights are durable in frontmatter and mirrored into the `highlights` table
 - Re-fetch preserves highlights from existing frontmatter
 - CLI: `tidy highlights --vault PATH [--article ID]`
+
+## Polish (M7)
+
+- First-run welcome when a vault is created; last vault reopens on launch
+- Per-source `overrides_json`: `content_selector`, `title_selector`,
+  `pagination_link_selector`, `max_pages`
+- Review filter lists `quality = needs_review`
+- `tidy backup` / `tidy reindex` (and matching app actions) for recovery
+- Shortcut help via `?`
 
 ## Initialization
 

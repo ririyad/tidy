@@ -1,9 +1,12 @@
 # Build Tidy desktop bundles and publish a GitHub Release.
 # Deploy log: Actions tab → this workflow run.
-# Trigger: push a version tag (v0.2.1) or run manually via workflow_dispatch.
+# Trigger: push a version tag (v0.5.0) or run manually via workflow_dispatch.
 #
 # macOS: both arch jobs use macos-14 (Apple Silicon). arm64 builds natively;
 # x64 cross-compiles. Windows: native MSVC x64 NSIS installer (unsigned).
+#
+# Optional Apple signing/notarization can be added later via
+# APPLE_CERTIFICATE / APPLE_ID secrets; builds ship unsigned by default.
 
 name: Release
 

@@ -64,14 +64,19 @@ cargo run -p tidy-cli -- search --vault ~/Tidy --tag source/example --filter sta
 
 # List highlights
 cargo run -p tidy-cli -- highlights --vault ~/Tidy
+
+# Backup and rebuild the index from markdown
+cargo run -p tidy-cli -- backup --vault ~/Tidy --out ~/Desktop
+cargo run -p tidy-cli -- reindex --vault ~/Tidy
 ```
 
 In the app: choose a vault → **Add** a source (recent or full backfill, refresh interval)
 → browse the Information Feed → read with typography controls. Due sources catch up on
 launch. Keyboard: `j`/`k` move, `o` open, `u` read/unread, `s` star, `e` archive, `r`
-refresh, `g f` inbox, `/` focus search. Sidebar tags and smart views filter the feed;
-**Save** stores the current filter + search as a reusable view. Select text in the
-reader to highlight and optionally annotate.
+refresh, `g f` inbox, `/` focus search, `?` shortcuts. Sidebar tags and smart views filter
+the feed; **Save** stores the current filter + search as a reusable view. Select text in
+the reader to highlight. Per-source **Overrides** set CSS selectors for hard sites.
+**Backup vault** / **Reindex** recover from disk.
 
 ## Workspace layout
 
@@ -94,12 +99,11 @@ docs/SPEC.md        # vault + frontmatter + scheduler contracts
 | **M4** Scheduler | Done | Per-source intervals, launch catch-up, run history |
 | **M5** Search | Done | FTS5 search, tags, smart views |
 | **M6** Highlights | Done | Anchored highlights + notes |
-| **M7** Polish | Next | Onboarding, overrides, packaging |
+| **M7** Polish | Done | Onboarding, overrides, backup/reindex, packaging |
 
-### Current: M6
+### Current: M7
 
-Select text in the reader to save a highlight with an optional note. Quotes are
-anchored with surrounding context, stored in article frontmatter, and mirrored
-to SQLite. CLI: `tidy highlights --vault PATH`.
+First-run welcome, last-vault reopen, per-source CSS overrides, Review filter,
+vault backup/reindex, and shortcut help. CLI: `tidy backup` / `tidy reindex`.
 
 See `docs/SPEC.md` for the vault and frontmatter contract.
