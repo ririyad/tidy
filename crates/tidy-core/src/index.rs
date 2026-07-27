@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::search::{
@@ -133,6 +133,18 @@ pub struct ArticleDetail {
     pub progress: f64,
     pub quality: String,
     pub revision: i64,
+    pub highlights: Vec<HighlightRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HighlightRow {
+    pub id: String,
+    pub article_id: i64,
+    pub text: String,
+    pub note: Option<String>,
+    pub prefix: String,
+    pub suffix: String,
+    pub created_at: String,
 }
 
 pub struct Index {
@@ -670,11 +682,102 @@ impl Index {
                         progress: row.get(16)?,
                         quality: row.get(17)?,
                         revision: row.get(18)?,
+                        highlights: Vec::new(),
                     })
                 },
             )
             .optional()?;
+        if let Some(mut article) = row {
+            article.highlights = self.list_highlights(Some(article.id))?;
+            Ok(Some(article))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn list_highlights(&self, article_id: Option<i64>) -> Result<Vec<HighlightRow>> {
+        let mut sql = String::from(
+            r#"
+            SELECT id, article_id, text, note, prefix, suffix, created_at
+            FROM highlights
+            WHERE 1 = 1
+            "#,
+        );
+        let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+        if let Some(article_id) = article_id {
+            sql.push_str(" AND article_id = ?");
+            params_vec.push(Box::new(article_id));
+        }
+        sql.push_str(" ORDER BY created_at ASC, id ASC");
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(params_refs.as_slice(), map_highlight_row)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?);
+        }
+        Ok(out)
+    }
+
+    pub fn get_highlight(&self, id: &str) -> Result<Option<HighlightRow>> {
+        let row = self
+            .conn
+            .query_row(
+                r#"
+                SELECT id, article_id, text, note, prefix, suffix, created_at
+                FROM highlights WHERE id = ?1
+                "#,
+                params![id],
+                map_highlight_row,
+            )
+            .optional()?;
         Ok(row)
+    }
+
+    pub fn upsert_highlight(&self, highlight: &HighlightRow) -> Result<()> {
+        self.conn.execute(
+            r#"
+            INSERT INTO highlights (id, article_id, text, note, prefix, suffix, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(id) DO UPDATE SET
+                article_id = excluded.article_id,
+                text = excluded.text,
+                note = excluded.note,
+                prefix = excluded.prefix,
+                suffix = excluded.suffix,
+                created_at = excluded.created_at
+            "#,
+            params![
+                highlight.id,
+                highlight.article_id,
+                highlight.text,
+                highlight.note,
+                highlight.prefix,
+                highlight.suffix,
+                highlight.created_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_highlight(&self, id: &str) -> Result<bool> {
+        let changed = self
+            .conn
+            .execute("DELETE FROM highlights WHERE id = ?1", params![id])?;
+        Ok(changed > 0)
+    }
+
+    pub fn replace_highlights(&self, article_id: i64, highlights: &[HighlightRow]) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM highlights WHERE article_id = ?1",
+            params![article_id],
+        )?;
+        for highlight in highlights {
+            self.upsert_highlight(highlight)?;
+        }
+        Ok(())
     }
 
     pub fn update_article_flags(
@@ -796,6 +899,18 @@ impl Index {
 
         Ok(article_id)
     }
+}
+
+fn map_highlight_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<HighlightRow> {
+    Ok(HighlightRow {
+        id: row.get(0)?,
+        article_id: row.get(1)?,
+        text: row.get(2)?,
+        note: row.get(3)?,
+        prefix: row.get(4)?,
+        suffix: row.get(5)?,
+        created_at: row.get(6)?,
+    })
 }
 
 fn reading_time(word_count: i64) -> u32 {

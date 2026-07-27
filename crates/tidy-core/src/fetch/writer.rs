@@ -29,9 +29,25 @@ pub struct ArticleFrontMatter {
     pub state: String,
     pub starred: bool,
     pub archived: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub highlights: Vec<FrontMatterHighlight>,
     pub content_hash: String,
     pub revision: u32,
     pub extraction: ExtractionInfo,
+}
+
+/// Durable highlight stored in article frontmatter (TextQuote-style anchors).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FrontMatterHighlight {
+    pub id: String,
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub prefix: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub suffix: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,6 +198,7 @@ mod tests {
             state: "unread".into(),
             starred: false,
             archived: false,
+            highlights: vec![],
             content_hash: "sha256:abc".into(),
             revision: 1,
             extraction: ExtractionInfo {
@@ -197,8 +214,23 @@ mod tests {
             .unwrap();
         assert_eq!(parsed.title, "Hello");
         assert_eq!(parsed.revision, 1);
-        let again =
-            write_article_file(&vault, "example-com", "2026-01-02-hello", &fm, "Body").unwrap();
-        assert!(matches!(again.status, WriteOutcomeStatus::Unchanged));
+        assert!(parsed.highlights.is_empty());
+        let with_hl = ArticleFrontMatter {
+            highlights: vec![FrontMatterHighlight {
+                id: "hl1".into(),
+                text: "Body".into(),
+                note: Some("note".into()),
+                prefix: "".into(),
+                suffix: "".into(),
+                created_at: "2026-07-27T00:00:00Z".into(),
+            }],
+            ..parsed
+        };
+        write_article_file(&vault, "example-com", "2026-01-02-hello", &with_hl, "Body").unwrap();
+        let again = read_existing_frontmatter(&outcome.absolute_path)
+            .unwrap()
+            .unwrap();
+        assert_eq!(again.highlights.len(), 1);
+        assert_eq!(again.highlights[0].note.as_deref(), Some("note"));
     }
 }

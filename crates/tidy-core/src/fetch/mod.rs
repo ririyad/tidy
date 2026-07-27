@@ -18,8 +18,8 @@ use crate::vault::Vault;
 pub use images::localize_images;
 pub use slug::{article_stem, source_slug};
 pub use writer::{
-    ArticleFrontMatter, ExtractionInfo, WriteOutcomeStatus, parse_frontmatter,
-    read_existing_frontmatter, render_document, write_article_file,
+    ArticleFrontMatter, ExtractionInfo, FrontMatterHighlight, WriteOutcomeStatus,
+    parse_frontmatter, read_existing_frontmatter, render_document, write_article_file,
 };
 
 #[derive(Debug, Clone)]
@@ -328,6 +328,10 @@ async fn fetch_one(
             .unwrap_or_else(|| "unread".into()),
         starred: existing_fm.as_ref().map(|fm| fm.starred).unwrap_or(false),
         archived: existing_fm.as_ref().map(|fm| fm.archived).unwrap_or(false),
+        highlights: existing_fm
+            .as_ref()
+            .map(|fm| fm.highlights.clone())
+            .unwrap_or_default(),
         content_hash: hash.clone(),
         revision,
         extraction: ExtractionInfo {
@@ -339,7 +343,7 @@ async fn fetch_one(
     let outcome = write_article_file(vault, source_slug, &stem, &frontmatter, &markdown)?;
     let rendered = render_markdown_html(&markdown);
 
-    index.upsert_article(&ArticleRecord {
+    let article_id = index.upsert_article(&ArticleRecord {
         source_id,
         url: item.url.to_string(),
         canonical_url: extracted.canonical_url.clone(),
@@ -360,6 +364,15 @@ async fn fetch_one(
         quality: extracted.quality.as_str().to_owned(),
         tags: frontmatter.tags.clone(),
     })?;
+
+    index.replace_highlights(
+        article_id,
+        &frontmatter
+            .highlights
+            .iter()
+            .map(|item| crate::highlights::from_frontmatter(article_id, item))
+            .collect::<Vec<_>>(),
+    )?;
 
     let status = match outcome.status {
         WriteOutcomeStatus::Created => FetchStatus::Added,

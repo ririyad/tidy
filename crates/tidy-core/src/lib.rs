@@ -2,6 +2,7 @@ mod discover;
 mod error;
 mod extract;
 mod fetch;
+mod highlights;
 mod http;
 mod index;
 mod robots;
@@ -24,10 +25,13 @@ pub use fetch::{
     ArticleFrontMatter, FetchOptions, FetchProgress, FetchReport, FetchStatus, fetch,
     fetch_with_progress, source_slug,
 };
+pub use highlights::{
+    HighlightInput, add_highlight, delete_highlight, list_highlights, update_highlight_note,
+};
 pub use http::{FetchResponse, HttpClient, HttpClientConfig, USER_AGENT};
 pub use index::{
-    ArticleDetail, ArticleFilter, ArticleListItem, ArticleRecord, FetchRunRow, Index, SourceRecord,
-    SourceRow,
+    ArticleDetail, ArticleFilter, ArticleListItem, ArticleRecord, FetchRunRow, HighlightRow, Index,
+    SourceRecord, SourceRow,
 };
 pub use robots::{RobotsRules, parse_robots};
 pub use scheduler::{
