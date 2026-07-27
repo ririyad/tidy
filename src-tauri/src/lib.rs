@@ -3,11 +3,11 @@ use std::{path::PathBuf, sync::Mutex};
 use serde::Serialize;
 use tauri::{Emitter, State};
 use tidy_core::{
-    ArticleDetail, ArticleFilter, ArticleListItem, ArticleStatePatch, FetchOptions, FetchProgress,
-    FetchReport, FetchRunRow, Index, ReaderSettings, ScheduleStatus, SourceRow, Vault,
-    VaultSummary, apply_article_state, fetch_with_progress, list_due_sources as find_due_sources,
-    list_run_history, load_reader_settings, parse_prefix, save_reader_settings, schedule_status,
-    source_slug,
+    ArticleDetail, ArticleFilter, ArticleListItem, ArticleQuery, ArticleStatePatch, FetchOptions,
+    FetchProgress, FetchReport, FetchRunRow, Index, ReaderSettings, ScheduleStatus, SmartViewQuery,
+    SmartViewRow, SourceRow, TagCount, Vault, VaultSummary, apply_article_state,
+    fetch_with_progress, list_due_sources as find_due_sources, list_run_history,
+    load_reader_settings, parse_prefix, save_reader_settings, schedule_status, source_slug,
 };
 use url::Url;
 
@@ -241,6 +241,8 @@ struct ListArticlesRequest {
     filter: Option<String>,
     source_id: Option<i64>,
     limit: Option<i64>,
+    search: Option<String>,
+    tag: Option<String>,
 }
 
 #[tauri::command]
@@ -255,10 +257,61 @@ fn list_articles(
         "all" => ArticleFilter::All,
         _ => ArticleFilter::Inbox,
     };
+    let query = ArticleQuery {
+        filter,
+        source_id: request.source_id,
+        tag: request.tag,
+        search: request.search,
+        limit: request.limit,
+    };
+    with_vault(&state, |_, index| {
+        index.query_articles(&query).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn list_tags(
+    state: State<'_, AppState>,
+    prefix: Option<String>,
+    limit: Option<i64>,
+) -> Result<Vec<TagCount>, String> {
     with_vault(&state, |_, index| {
         index
-            .list_articles(filter, request.source_id, request.limit)
+            .list_tags(prefix.as_deref(), limit.unwrap_or(50))
             .map_err(|e| e.to_string())
+    })
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SaveSmartViewRequest {
+    id: Option<String>,
+    name: String,
+    query: SmartViewQuery,
+}
+
+#[tauri::command]
+fn list_smart_views(state: State<'_, AppState>) -> Result<Vec<SmartViewRow>, String> {
+    with_vault(&state, |_, index| {
+        index.list_smart_views().map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn save_smart_view(
+    state: State<'_, AppState>,
+    request: SaveSmartViewRequest,
+) -> Result<SmartViewRow, String> {
+    with_vault(&state, |_, index| {
+        index
+            .save_smart_view(request.id.as_deref(), &request.name, &request.query)
+            .map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn delete_smart_view(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    with_vault(&state, |_, index| {
+        index.delete_smart_view(&id).map_err(|e| e.to_string())
     })
 }
 
@@ -357,6 +410,10 @@ pub fn run() {
             list_fetch_runs,
             catch_up_due_sources,
             list_articles,
+            list_tags,
+            list_smart_views,
+            save_smart_view,
+            delete_smart_view,
             get_article,
             set_article_state,
             set_article_progress,

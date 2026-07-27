@@ -2,8 +2,8 @@ use std::{env, path::PathBuf, process};
 
 use anyhow::{Context, Result, bail};
 use tidy_core::{
-    CrawlLimits, DiscoverOptions, FetchOptions, Index, Vault, discover, fetch, list_run_history,
-    parse_prefix, schedule_status,
+    ArticleFilter, ArticleQuery, CrawlLimits, DiscoverOptions, FetchOptions, Index, Vault,
+    discover, fetch, list_run_history, parse_prefix, schedule_status,
 };
 
 #[tokio::main]
@@ -282,6 +282,90 @@ async fn run() -> Result<()> {
             }
             Ok(())
         }
+        "search" => {
+            let mut vault = None;
+            let mut filter = ArticleFilter::Inbox;
+            let mut tag = None;
+            let mut source_id = None;
+            let mut limit = None;
+            let mut json = false;
+            let mut query_parts = Vec::new();
+
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--vault" => {
+                        let value = args.next().context("--vault requires a path")?;
+                        vault = Some(PathBuf::from(value));
+                    }
+                    "--filter" => {
+                        let value = args.next().context("--filter requires a value")?;
+                        filter = match value.as_str() {
+                            "unread" => ArticleFilter::Unread,
+                            "starred" => ArticleFilter::Starred,
+                            "archived" => ArticleFilter::Archived,
+                            "all" => ArticleFilter::All,
+                            _ => ArticleFilter::Inbox,
+                        };
+                    }
+                    "--tag" => {
+                        tag = Some(args.next().context("--tag requires a value")?);
+                    }
+                    "--source" => {
+                        let value = args.next().context("--source requires an id")?;
+                        source_id = Some(value.parse::<i64>().context("invalid --source")?);
+                    }
+                    "--limit" => {
+                        let value = args.next().context("--limit requires a number")?;
+                        limit = Some(value.parse::<i64>().context("invalid --limit")?);
+                    }
+                    "--json" => json = true,
+                    other if other.starts_with('-') => bail!("unknown flag `{other}`"),
+                    other => query_parts.push(other.to_string()),
+                }
+            }
+
+            let vault_path = vault.context(
+                "usage: tidy search --vault PATH [--filter inbox|starred|archived|all] [--tag TAG] [--source ID] [--limit N] [--json] [QUERY...]",
+            )?;
+            let search = if query_parts.is_empty() {
+                None
+            } else {
+                Some(query_parts.join(" "))
+            };
+
+            let vault = Vault::open(&vault_path)
+                .with_context(|| format!("failed to open vault at {}", vault_path.display()))?;
+            let index = Index::open(vault.database_path()).context("failed to open index")?;
+            let articles = index
+                .query_articles(&ArticleQuery {
+                    filter,
+                    source_id,
+                    tag,
+                    search,
+                    limit,
+                })
+                .context("search failed")?;
+
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&articles)
+                        .context("failed to serialize results")?
+                );
+            } else if articles.is_empty() {
+                println!("No matching articles.");
+            } else {
+                for item in articles {
+                    println!(
+                        "#{:<6} {:<48} {}",
+                        item.id,
+                        truncate(&item.title, 48),
+                        item.source_title
+                    );
+                }
+            }
+            Ok(())
+        }
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
@@ -292,6 +376,20 @@ async fn run() -> Result<()> {
 
 fn print_help() {
     print!("{HELP}");
+}
+
+fn truncate(value: &str, max: usize) -> String {
+    if value.chars().count() <= max {
+        value.to_string()
+    } else {
+        format!(
+            "{}…",
+            value
+                .chars()
+                .take(max.saturating_sub(1))
+                .collect::<String>()
+        )
+    }
 }
 
 const HELP: &str = "\
@@ -316,6 +414,13 @@ COMMANDS:
         --source ID             Filter runs to one source
         --limit N               Cap history rows (default 20)
         --json                  Emit machine-readable JSON
+    search --vault PATH         Search indexed articles (FTS5)
+        [--filter FILTER]       inbox, unread, starred, archived, or all
+        [--tag TAG]             Require a tag (e.g. source/example)
+        [--source ID]           Limit to one source
+        [--limit N]             Cap result rows
+        [--json]                Emit machine-readable JSON
+        [QUERY...]              Full-text search terms
     help                        Show this help
 
 Discovery order: feed → sitemap → HTML crawl fallback.
