@@ -4,10 +4,11 @@ use serde::Serialize;
 use tauri::{Emitter, State};
 use tidy_core::{
     ArticleDetail, ArticleFilter, ArticleListItem, ArticleQuery, ArticleStatePatch, FetchOptions,
-    FetchProgress, FetchReport, FetchRunRow, Index, ReaderSettings, ScheduleStatus, SmartViewQuery,
-    SmartViewRow, SourceRow, TagCount, Vault, VaultSummary, apply_article_state,
-    fetch_with_progress, list_due_sources as find_due_sources, list_run_history,
-    load_reader_settings, parse_prefix, save_reader_settings, schedule_status, source_slug,
+    FetchProgress, FetchReport, FetchRunRow, HighlightInput, HighlightRow, Index, ReaderSettings,
+    ScheduleStatus, SmartViewQuery, SmartViewRow, SourceRow, TagCount, Vault, VaultSummary,
+    add_highlight, apply_article_state, delete_highlight, fetch_with_progress,
+    list_due_sources as find_due_sources, list_highlights, list_run_history, load_reader_settings,
+    parse_prefix, save_reader_settings, schedule_status, source_slug, update_highlight_note,
 };
 use url::Url;
 
@@ -323,6 +324,64 @@ fn get_article(state: State<'_, AppState>, id: i64) -> Result<Option<ArticleDeta
 }
 
 #[derive(Debug, serde::Deserialize)]
+struct AddHighlightRequest {
+    article_id: i64,
+    text: String,
+    note: Option<String>,
+    prefix: Option<String>,
+    suffix: Option<String>,
+}
+
+#[tauri::command]
+fn add_article_highlight(
+    state: State<'_, AppState>,
+    request: AddHighlightRequest,
+) -> Result<HighlightRow, String> {
+    with_vault(&state, |vault, index| {
+        add_highlight(
+            vault,
+            index,
+            request.article_id,
+            HighlightInput {
+                text: request.text,
+                note: request.note,
+                prefix: request.prefix,
+                suffix: request.suffix,
+            },
+        )
+        .map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn update_article_highlight_note(
+    state: State<'_, AppState>,
+    id: String,
+    note: Option<String>,
+) -> Result<HighlightRow, String> {
+    with_vault(&state, |vault, index| {
+        update_highlight_note(vault, index, &id, note).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn delete_article_highlight(state: State<'_, AppState>, id: String) -> Result<bool, String> {
+    with_vault(&state, |vault, index| {
+        delete_highlight(vault, index, &id).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+fn list_article_highlights(
+    state: State<'_, AppState>,
+    article_id: Option<i64>,
+) -> Result<Vec<HighlightRow>, String> {
+    with_vault(&state, |_, index| {
+        list_highlights(index, article_id).map_err(|e| e.to_string())
+    })
+}
+
+#[derive(Debug, serde::Deserialize)]
 struct SetArticleStateRequest {
     id: i64,
     state: Option<String>,
@@ -415,6 +474,10 @@ pub fn run() {
             save_smart_view,
             delete_smart_view,
             get_article,
+            add_article_highlight,
+            update_article_highlight_note,
+            delete_article_highlight,
+            list_article_highlights,
             set_article_state,
             set_article_progress,
             get_reader_settings,

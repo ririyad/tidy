@@ -3,7 +3,7 @@ use std::{env, path::PathBuf, process};
 use anyhow::{Context, Result, bail};
 use tidy_core::{
     ArticleFilter, ArticleQuery, CrawlLimits, DiscoverOptions, FetchOptions, Index, Vault,
-    discover, fetch, list_run_history, parse_prefix, schedule_status,
+    discover, fetch, list_highlights, list_run_history, parse_prefix, schedule_status,
 };
 
 #[tokio::main]
@@ -366,6 +366,57 @@ async fn run() -> Result<()> {
             }
             Ok(())
         }
+        "highlights" => {
+            let mut vault = None;
+            let mut article_id = None;
+            let mut json = false;
+
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--vault" => {
+                        let value = args.next().context("--vault requires a path")?;
+                        vault = Some(PathBuf::from(value));
+                    }
+                    "--article" => {
+                        let value = args.next().context("--article requires an id")?;
+                        article_id = Some(value.parse::<i64>().context("invalid --article")?);
+                    }
+                    "--json" => json = true,
+                    other => bail!("unknown flag `{other}`"),
+                }
+            }
+
+            let vault_path =
+                vault.context("usage: tidy highlights --vault PATH [--article ID] [--json]")?;
+            let vault = Vault::open(&vault_path)
+                .with_context(|| format!("failed to open vault at {}", vault_path.display()))?;
+            let index = Index::open(vault.database_path()).context("failed to open index")?;
+            let rows = list_highlights(&index, article_id).context("failed to list highlights")?;
+
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&rows)
+                        .context("failed to serialize highlights")?
+                );
+            } else if rows.is_empty() {
+                println!("No highlights yet.");
+            } else {
+                for item in rows {
+                    println!(
+                        "{}  article#{}  \"{}\"{}",
+                        item.id,
+                        item.article_id,
+                        truncate(&item.text, 60),
+                        item.note
+                            .as_ref()
+                            .map(|note| format!("  — {}", truncate(note, 40)))
+                            .unwrap_or_default()
+                    );
+                }
+            }
+            Ok(())
+        }
         "help" | "--help" | "-h" => {
             print_help();
             Ok(())
@@ -421,6 +472,9 @@ COMMANDS:
         [--limit N]             Cap result rows
         [--json]                Emit machine-readable JSON
         [QUERY...]              Full-text search terms
+    highlights --vault PATH     List anchored highlights and notes
+        [--article ID]          Limit to one article
+        [--json]                Emit machine-readable JSON
     help                        Show this help
 
 Discovery order: feed → sitemap → HTML crawl fallback.
