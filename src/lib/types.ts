@@ -15,6 +15,14 @@ export type SourceRow = {
   enabled: boolean;
   article_count: number;
   unread_count: number;
+  overrides: SourceOverrides;
+};
+
+export type SourceOverrides = {
+  content_selector?: string | null;
+  title_selector?: string | null;
+  pagination_link_selector?: string | null;
+  max_pages?: number | null;
 };
 
 export type FetchRunRow = {
@@ -96,7 +104,25 @@ export type FetchProgress = {
   message: string;
 };
 
-export type FeedFilter = 'inbox' | 'unread' | 'starred' | 'archived' | 'all';
+export type FeedFilter = 'inbox' | 'unread' | 'starred' | 'archived' | 'all' | 'review';
+
+export type BackupReport = {
+  destination: string;
+  copied_files: number;
+};
+
+export type ReindexReport = {
+  scanned: number;
+  upserted: number;
+  skipped: number;
+  failed: number;
+  warnings: string[];
+};
+
+export type AppInfo = {
+  name: string;
+  version: string;
+};
 
 export type TagCount = {
   tag: string;

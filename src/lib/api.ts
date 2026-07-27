@@ -3,13 +3,17 @@ import type {
   ArticleDetail,
   ArticleListItem,
   ArticleQuery,
+  AppInfo,
+  BackupReport,
   FeedFilter,
   FetchRunRow,
   HighlightRow,
   ReaderSettings,
+  ReindexReport,
   ScheduleStatus,
   SmartViewQuery,
   SmartViewRow,
+  SourceOverrides,
   SourceRow,
   TagCount,
   VaultSummary
@@ -17,6 +21,8 @@ import type {
 
 export const api = {
   selectVault: () => invoke<VaultSummary | null>('select_vault'),
+  openVaultPath: (path: string) => invoke<VaultSummary>('open_vault_path', { path }),
+  getLastVaultPath: () => invoke<string | null>('get_last_vault_path'),
   listSources: () => invoke<SourceRow[]>('list_sources'),
   addSource: (payload: {
     url_prefix: string;
@@ -38,6 +44,11 @@ export const api = {
       intervalMinutes: payload.intervalMinutes ?? null,
       enabled: payload.enabled ?? null
     }),
+  updateSourceOverrides: (sourceId: number, overrides: SourceOverrides) =>
+    invoke<SourceRow>('update_source_overrides', { sourceId, overrides }),
+  backupVault: () => invoke<BackupReport | null>('backup_open_vault'),
+  reindexVault: () => invoke<ReindexReport>('reindex_open_vault'),
+  getAppInfo: () => invoke<AppInfo>('get_app_info'),
   listDueSources: () => invoke<SourceRow[]>('list_due_sources'),
   getScheduleStatus: () => invoke<ScheduleStatus[]>('get_schedule_status'),
   listFetchRuns: (sourceId?: number | null, limit = 25) =>

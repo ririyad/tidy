@@ -210,7 +210,8 @@
         </p>
         <div
           class="reader-content mt-8"
-          role="document"
+          role="region"
+          aria-label="Article body"
           bind:this={contentRoot}
           onmouseup={onMouseUp}
         >

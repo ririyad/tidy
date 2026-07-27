@@ -4,6 +4,7 @@
   import { api } from '$lib/api';
   import AddSourceModal from '$lib/components/AddSourceModal.svelte';
   import FeedList from '$lib/components/FeedList.svelte';
+  import Onboarding from '$lib/components/Onboarding.svelte';
   import Reader from '$lib/components/Reader.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import type {
@@ -14,6 +15,7 @@
     FetchRunRow,
     ReaderSettings,
     SmartViewRow,
+    SourceOverrides,
     SourceRow,
     TagCount,
     VaultSummary
@@ -42,6 +44,8 @@
     measure: 'narrow'
   });
   let showAdd = $state(false);
+  let onboardingStep = $state<'welcome' | 'help' | null>(null);
+  let appVersion = $state('0.5.0');
   let fetching = $state(false);
   let progressMessage = $state('');
   let fetchRuns = $state<FetchRunRow[]>([]);
@@ -58,6 +62,23 @@
     }).then((fn) => {
       unlisten = fn;
     });
+    void (async () => {
+      try {
+        const info = await api.getAppInfo();
+        appVersion = info.version;
+      } catch {
+        // desktop-only command; ignore in browser preview
+      }
+      try {
+        const last = await api.getLastVaultPath();
+        if (last && !vault) {
+          vault = await api.openVaultPath(last);
+          await bootstrapVault();
+        }
+      } catch {
+        // stale last-vault path — stay on chooser
+      }
+    })();
     return () => {
       unlisten?.();
       if (scheduleTimer) clearInterval(scheduleTimer);
@@ -71,7 +92,7 @@
       const next = await api.selectVault();
       if (next) {
         vault = next;
-        await bootstrapVault();
+        await bootstrapVault({ showWelcome: next.created });
       }
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
@@ -80,7 +101,7 @@
     }
   }
 
-  async function bootstrapVault() {
+  async function bootstrapVault(options?: { showWelcome?: boolean }) {
     sources = await api.listSources();
     settings = await api.getReaderSettings();
     tags = await api.listTags();
@@ -89,6 +110,9 @@
     await reloadFetchRuns();
     startScheduleTicker();
     void catchUp();
+    if (options?.showWelcome || (vault?.created && sources.length === 0)) {
+      onboardingStep = 'welcome';
+    }
   }
 
   async function reloadTags() {
@@ -304,6 +328,48 @@
     sources = await api.listSources();
   }
 
+  async function saveOverrides(id: number, overrides: SourceOverrides) {
+    await api.updateSourceOverrides(id, overrides);
+    sources = await api.listSources();
+  }
+
+  async function backupVault() {
+    error = '';
+    try {
+      const report = await api.backupVault();
+      if (report) {
+        progressMessage = `Backup saved (${report.copied_files} files)`;
+        setTimeout(() => {
+          progressMessage = '';
+        }, 2500);
+      }
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    }
+  }
+
+  async function reindexVault() {
+    error = '';
+    fetching = true;
+    try {
+      const report = await api.reindexVault();
+      sources = await api.listSources();
+      await reloadArticles();
+      await reloadTags();
+      progressMessage = `Reindexed ${report.upserted}/${report.scanned}`;
+      setTimeout(() => {
+        progressMessage = '';
+      }, 2500);
+      if (report.failed > 0) {
+        error = report.warnings.slice(0, 3).join(' · ');
+      }
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    } finally {
+      fetching = false;
+    }
+  }
+
   function moveSelection(delta: number) {
     if (articles.length === 0) return;
     const index = articles.findIndex((item) => item.id === selectedId);
@@ -375,6 +441,10 @@
       case '/':
         event.preventDefault();
         searchInput?.focus();
+        break;
+      case '?':
+        event.preventDefault();
+        onboardingStep = 'help';
         break;
     }
   }
@@ -486,6 +556,10 @@
       onChangeVault={chooseVault}
       onToggleEnabled={toggleSourceEnabled}
       onChangeInterval={changeSourceInterval}
+      onSaveOverrides={saveOverrides}
+      onBackup={() => void backupVault()}
+      onReindex={() => void reindexVault()}
+      onShowHelp={() => (onboardingStep = 'help')}
     />
     <FeedList
       {articles}
@@ -544,4 +618,16 @@
   busy={fetching}
   onClose={() => (showAdd = false)}
   onSubmit={handleAddSource}
+/>
+
+<Onboarding
+  open={onboardingStep !== null}
+  step={onboardingStep}
+  {appVersion}
+  onAddSource={() => {
+    onboardingStep = null;
+    showAdd = true;
+  }}
+  onDismiss={() => (onboardingStep = null)}
+  onCloseHelp={() => (onboardingStep = null)}
 />

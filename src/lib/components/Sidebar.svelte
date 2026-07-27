@@ -23,7 +23,11 @@
     onRemoveSource,
     onChangeVault,
     onToggleEnabled,
-    onChangeInterval
+    onChangeInterval,
+    onSaveOverrides,
+    onBackup,
+    onReindex,
+    onShowHelp
   }: {
     sources: SourceRow[];
     filter: FeedFilter;
@@ -46,12 +50,25 @@
     onChangeVault: () => void;
     onToggleEnabled: (id: number, enabled: boolean) => void;
     onChangeInterval: (id: number, minutes: number) => void;
+    onSaveOverrides: (
+      id: number,
+      overrides: {
+        content_selector?: string | null;
+        title_selector?: string | null;
+        pagination_link_selector?: string | null;
+        max_pages?: number | null;
+      }
+    ) => void;
+    onBackup: () => void;
+    onReindex: () => void;
+    onShowHelp: () => void;
   } = $props();
 
   const filters: { id: FeedFilter; label: string }[] = [
     { id: 'inbox', label: 'Inbox' },
     { id: 'starred', label: 'Starred' },
     { id: 'archived', label: 'Archive' },
+    { id: 'review', label: 'Review' },
     { id: 'all', label: 'All' }
   ];
 
@@ -64,6 +81,18 @@
   ];
 
   const selected = $derived(sources.find((source) => source.id === selectedSourceId) ?? null);
+
+  let contentSelector = $state('');
+  let titleSelector = $state('');
+  let paginationSelector = $state('');
+  let maxPages = $state('');
+
+  $effect(() => {
+    contentSelector = selected?.overrides.content_selector ?? '';
+    titleSelector = selected?.overrides.title_selector ?? '';
+    paginationSelector = selected?.overrides.pagination_link_selector ?? '';
+    maxPages = selected?.overrides.max_pages?.toString() ?? '';
+  });
 </script>
 
 <aside class="panel flex h-full flex-col px-4 py-5">
@@ -252,6 +281,56 @@
             {/each}
           </ul>
         {/if}
+
+        <p class="mt-4 text-xs font-semibold tracking-[0.12em] text-[var(--ink-soft)] uppercase">
+          Overrides
+        </p>
+        <label class="mt-2 block text-xs text-[var(--ink-soft)]">
+          Content selector
+          <input
+            class="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-2 py-1.5 text-sm"
+            placeholder="article.post"
+            bind:value={contentSelector}
+          />
+        </label>
+        <label class="mt-2 block text-xs text-[var(--ink-soft)]">
+          Title selector
+          <input
+            class="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-2 py-1.5 text-sm"
+            placeholder="h1.entry-title"
+            bind:value={titleSelector}
+          />
+        </label>
+        <label class="mt-2 block text-xs text-[var(--ink-soft)]">
+          Pagination selector
+          <input
+            class="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-2 py-1.5 text-sm"
+            placeholder="a.next-page"
+            bind:value={paginationSelector}
+          />
+        </label>
+        <label class="mt-2 block text-xs text-[var(--ink-soft)]">
+          Max crawl pages
+          <input
+            class="mt-1 w-full rounded-lg border border-[var(--line)] bg-white px-2 py-1.5 text-sm"
+            type="number"
+            min="1"
+            placeholder="200"
+            bind:value={maxPages}
+          />
+        </label>
+        <button
+          class="mt-2 w-full rounded-lg bg-[var(--accent-soft)] px-2 py-1.5 text-xs font-semibold text-[var(--accent)]"
+          onclick={() =>
+            onSaveOverrides(selected.id, {
+              content_selector: contentSelector.trim() || null,
+              title_selector: titleSelector.trim() || null,
+              pagination_link_selector: paginationSelector.trim() || null,
+              max_pages: maxPages.trim() ? Number(maxPages) : null
+            })}
+        >
+          Save overrides
+        </button>
       </div>
     {/if}
   </div>
@@ -263,6 +342,24 @@
       disabled={fetching}
     >
       {fetching ? 'Refreshing…' : 'Refresh'}
+    </button>
+    <button
+      class="w-full rounded-xl px-3 py-2 text-sm text-[var(--ink-soft)] hover:bg-white/60"
+      onclick={onBackup}
+    >
+      Backup vault
+    </button>
+    <button
+      class="w-full rounded-xl px-3 py-2 text-sm text-[var(--ink-soft)] hover:bg-white/60"
+      onclick={onReindex}
+    >
+      Reindex
+    </button>
+    <button
+      class="w-full rounded-xl px-3 py-2 text-sm text-[var(--ink-soft)] hover:bg-white/60"
+      onclick={onShowHelp}
+    >
+      Shortcuts
     </button>
     <button
       class="w-full rounded-xl px-3 py-2 text-sm text-[var(--ink-soft)] hover:bg-white/60"

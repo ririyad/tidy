@@ -47,7 +47,11 @@
   <div class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
     {#if articles.length === 0}
       <div class="px-4 py-10 text-sm leading-7 text-[var(--ink-soft)]">
-        Nothing here yet. Add a source, try another filter, or adjust your search.
+        {#if searchQuery.trim()}
+          No articles match this search. Try fewer terms or clear the query.
+        {:else}
+          Nothing here yet. Add a source, switch filters, or open Review for thin extractions.
+        {/if}
       </div>
     {:else}
       {#each groups as group}
@@ -79,6 +83,9 @@
                 · {article.reading_time} min
                 {#if article.author}
                   · {article.author}
+                {/if}
+                {#if article.quality === 'needs_review'}
+                  · <span class="text-[var(--warn)]">needs review</span>
                 {/if}
               </p>
             </button>
