@@ -1,8 +1,14 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 use crate::error::Result;
+use crate::search::{
+    ArticleQuery, SmartViewQuery, SmartViewRow, TagCount, parse_smart_view_query, prepare_fts_query,
+};
 
 #[derive(Debug, Clone)]
 pub struct SourceRecord {
@@ -422,25 +428,112 @@ impl Index {
         let mut stmt = self.conn.prepare(&sql)?;
         let params_refs: Vec<&dyn rusqlite::types::ToSql> =
             params_vec.iter().map(|p| p.as_ref()).collect();
+        map_article_list_rows(stmt.query_map(params_refs.as_slice(), map_article_list_row)?)
+    }
+
+    pub fn query_articles(&self, query: &ArticleQuery) -> Result<Vec<ArticleListItem>> {
+        let fts = query.search.as_deref().and_then(prepare_fts_query);
+        let tag = query
+            .tag
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty());
+
+        let mut sql = String::from(
+            r#"
+            SELECT
+                a.id, a.source_id, s.title, a.url, a.path, a.title, a.author,
+                a.published_at, a.fetched_at, a.word_count, a.excerpt,
+                a.state, a.starred, a.archived, a.quality
+            "#,
+        );
+
+        if fts.is_some() {
+            sql.push_str("FROM articles_fts fts\n");
+            sql.push_str("JOIN articles a ON a.id = fts.rowid\n");
+        } else {
+            sql.push_str("FROM articles a\n");
+        }
+
+        sql.push_str("JOIN sources s ON s.id = a.source_id\n");
+        sql.push_str("WHERE 1 = 1\n");
+
+        let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(fts_query) = &fts {
+            sql.push_str(" AND fts MATCH ?");
+            params_vec.push(Box::new(fts_query.clone()));
+        }
+
+        match query.filter {
+            ArticleFilter::Inbox | ArticleFilter::Unread => {
+                sql.push_str(" AND a.state = 'unread' AND a.archived = 0");
+            }
+            ArticleFilter::Starred => {
+                sql.push_str(" AND a.starred = 1 AND a.archived = 0");
+            }
+            ArticleFilter::Archived => {
+                sql.push_str(" AND a.archived = 1");
+            }
+            ArticleFilter::All => {
+                sql.push_str(" AND a.archived = 0");
+            }
+        }
+
+        if let Some(source_id) = query.source_id {
+            sql.push_str(" AND a.source_id = ?");
+            params_vec.push(Box::new(source_id));
+        }
+
+        if let Some(tag) = tag {
+            sql.push_str(
+                " AND EXISTS (SELECT 1 FROM article_tags at WHERE at.article_id = a.id AND at.tag = ?)",
+            );
+            params_vec.push(Box::new(tag.to_string()));
+        }
+
+        if fts.is_some() {
+            sql.push_str(" ORDER BY bm25(fts)");
+        } else {
+            sql.push_str(" ORDER BY COALESCE(a.published_at, a.fetched_at) DESC, a.id DESC");
+        }
+
+        if let Some(limit) = query.limit {
+            sql.push_str(" LIMIT ?");
+            params_vec.push(Box::new(limit));
+        }
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        map_article_list_rows(stmt.query_map(params_refs.as_slice(), map_article_list_row)?)
+    }
+
+    pub fn list_tags(&self, prefix: Option<&str>, limit: i64) -> Result<Vec<TagCount>> {
+        let mut sql = String::from(
+            r#"
+            SELECT tag, COUNT(*) AS count
+            FROM article_tags
+            WHERE 1 = 1
+            "#,
+        );
+        let mut params_vec: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(prefix) = prefix.filter(|value| !value.is_empty()) {
+            sql.push_str(" AND tag LIKE ?");
+            params_vec.push(Box::new(format!("{prefix}%")));
+        }
+
+        sql.push_str(" GROUP BY tag ORDER BY count DESC, tag COLLATE NOCASE ASC LIMIT ?");
+        params_vec.push(Box::new(limit));
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
         let rows = stmt.query_map(params_refs.as_slice(), |row| {
-            let word_count: i64 = row.get(9)?;
-            Ok(ArticleListItem {
-                id: row.get(0)?,
-                source_id: row.get(1)?,
-                source_title: row.get(2)?,
-                url: row.get(3)?,
-                path: row.get(4)?,
-                title: row.get(5)?,
-                author: row.get(6)?,
-                published_at: row.get(7)?,
-                fetched_at: row.get(8)?,
-                word_count,
-                reading_time: reading_time(word_count),
-                excerpt: row.get(10)?,
-                state: row.get(11)?,
-                starred: row.get::<_, i64>(12)? != 0,
-                archived: row.get::<_, i64>(13)? != 0,
-                quality: row.get(14)?,
+            Ok(TagCount {
+                tag: row.get(0)?,
+                count: row.get(1)?,
             })
         })?;
 
@@ -449,6 +542,94 @@ impl Index {
             out.push(row?);
         }
         Ok(out)
+    }
+
+    pub fn list_smart_views(&self) -> Result<Vec<SmartViewRow>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, name, query_json, position FROM smart_views ORDER BY position ASC, name COLLATE NOCASE ASC")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        })?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, name, query_json, position) = row?;
+            let query = parse_smart_view_query(&query_json)?;
+            out.push(SmartViewRow {
+                id,
+                name,
+                query,
+                position,
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn save_smart_view(
+        &self,
+        id: Option<&str>,
+        name: &str,
+        query: &SmartViewQuery,
+    ) -> Result<SmartViewRow> {
+        let trimmed_name = name.trim();
+        if trimmed_name.is_empty() {
+            return Err(crate::error::TidyError::Message(
+                "smart view name is required".into(),
+            ));
+        }
+
+        let id = id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .unwrap_or_else(|| new_smart_view_id(trimmed_name));
+        let query_json = serde_json::to_string(query)?;
+        let position: i64 = self
+            .conn
+            .query_row(
+                "SELECT position FROM smart_views WHERE id = ?1",
+                params![&id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .unwrap_or_else(|| {
+                self.conn
+                    .query_row(
+                        "SELECT COALESCE(MAX(position), -1) + 1 FROM smart_views",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0)
+            });
+
+        self.conn.execute(
+            r#"
+            INSERT INTO smart_views (id, name, query_json, position)
+            VALUES (?1, ?2, ?3, ?4)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                query_json = excluded.query_json
+            "#,
+            params![id, trimmed_name, query_json, position],
+        )?;
+
+        self.list_smart_views()?
+            .into_iter()
+            .find(|view| view.id == id)
+            .ok_or_else(|| crate::error::TidyError::Message("smart view missing after save".into()))
+    }
+
+    pub fn delete_smart_view(&self, id: &str) -> Result<bool> {
+        let changed = self
+            .conn
+            .execute("DELETE FROM smart_views WHERE id = ?1", params![id])?;
+        Ok(changed > 0)
     }
 
     pub fn get_article(&self, id: i64) -> Result<Option<ArticleDetail>> {
@@ -619,6 +800,45 @@ impl Index {
 
 fn reading_time(word_count: i64) -> u32 {
     ((word_count as f64) / 200.0).ceil().max(1.0) as u32
+}
+
+fn map_article_list_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArticleListItem> {
+    let word_count: i64 = row.get(9)?;
+    Ok(ArticleListItem {
+        id: row.get(0)?,
+        source_id: row.get(1)?,
+        source_title: row.get(2)?,
+        url: row.get(3)?,
+        path: row.get(4)?,
+        title: row.get(5)?,
+        author: row.get(6)?,
+        published_at: row.get(7)?,
+        fetched_at: row.get(8)?,
+        word_count,
+        reading_time: reading_time(word_count),
+        excerpt: row.get(10)?,
+        state: row.get(11)?,
+        starred: row.get::<_, i64>(12)? != 0,
+        archived: row.get::<_, i64>(13)? != 0,
+        quality: row.get(14)?,
+    })
+}
+
+fn map_article_list_rows(
+    rows: impl Iterator<Item = rusqlite::Result<ArticleListItem>>,
+) -> Result<Vec<ArticleListItem>> {
+    let mut out = Vec::new();
+    for row in rows {
+        out.push(row?);
+    }
+    Ok(out)
+}
+
+fn new_smart_view_id(name: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    name.hash(&mut hasher);
+    Utc::now().timestamp_nanos_opt().hash(&mut hasher);
+    format!("sv{:x}", hasher.finish())
 }
 
 fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRow> {

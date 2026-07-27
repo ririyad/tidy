@@ -6,6 +6,7 @@ mod http;
 mod index;
 mod robots;
 mod scheduler;
+mod search;
 mod settings;
 mod state;
 mod vault;
@@ -32,6 +33,10 @@ pub use robots::{RobotsRules, parse_robots};
 pub use scheduler::{
     DEFAULT_INTERVAL_MINUTES, ScheduleStatus, list_due_sources, list_run_history, schedule_status,
     source_is_due,
+};
+pub use search::{
+    ArticleQuery, SmartViewFilter, SmartViewQuery, SmartViewRow, TagCount, parse_smart_view_query,
+    prepare_fts_query,
 };
 pub use settings::{ReaderSettings, load_reader_settings, save_reader_settings};
 pub use state::{ArticleStatePatch, apply_article_state};

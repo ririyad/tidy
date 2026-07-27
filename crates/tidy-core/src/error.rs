@@ -23,6 +23,8 @@ pub enum TidyError {
     Database(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
     #[error("{0}")]
     Message(String),
 }
