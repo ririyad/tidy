@@ -22,6 +22,7 @@ pub enum SmartViewFilter {
     Starred,
     Archived,
     All,
+    Review,
 }
 
 impl SmartViewFilter {
@@ -32,6 +33,7 @@ impl SmartViewFilter {
             Self::Starred => ArticleFilter::Starred,
             Self::Archived => ArticleFilter::Archived,
             Self::All => ArticleFilter::All,
+            Self::Review => ArticleFilter::Review,
         }
     }
 
@@ -42,6 +44,7 @@ impl SmartViewFilter {
             ArticleFilter::Starred => Self::Starred,
             ArticleFilter::Archived => Self::Archived,
             ArticleFilter::All => Self::All,
+            ArticleFilter::Review => Self::Review,
         }
     }
 }

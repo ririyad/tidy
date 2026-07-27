@@ -12,6 +12,7 @@ pub async fn crawl_prefix(
     client: &HttpClient,
     prefix: &Url,
     limits: &CrawlLimits,
+    pagination_link_selector: Option<&str>,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<DiscoveredUrl>> {
     let mut queue: VecDeque<(Url, u32)> = VecDeque::new();
@@ -74,7 +75,14 @@ pub async fn crawl_prefix(
             continue;
         }
 
-        for link in extract_links(&url, &html) {
+        let mut links = extract_links(&url, &html);
+        if let Some(selector) = pagination_link_selector {
+            let mut preferred = extract_links_by_selector(&url, &html, selector);
+            preferred.append(&mut links);
+            links = preferred;
+        }
+
+        for link in links {
             if !same_host(&link, prefix) {
                 continue;
             }
@@ -93,6 +101,40 @@ pub async fn crawl_prefix(
     }
 
     Ok(discovered)
+}
+
+fn extract_links_by_selector(base: &Url, html: &str, selector: &str) -> Vec<Url> {
+    let document = Html::parse_document(html);
+    let Ok(parsed) = Selector::parse(selector) else {
+        return Vec::new();
+    };
+    let mut links = Vec::new();
+    for element in document.select(&parsed) {
+        let href = element.value().attr("href").map(str::to_owned).or_else(|| {
+            let Ok(anchor) = Selector::parse("a[href]") else {
+                return None;
+            };
+            element
+                .select(&anchor)
+                .next()
+                .and_then(|node| node.value().attr("href").map(str::to_owned))
+        });
+        let Some(href) = href
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        if href.starts_with('#') || href.starts_with("mailto:") || href.starts_with("javascript:") {
+            continue;
+        }
+        if let Ok(url) = base.join(&href) {
+            let mut clean = url;
+            clean.set_fragment(None);
+            links.push(clean);
+        }
+    }
+    links
 }
 
 fn extract_links(base: &Url, html: &str) -> Vec<Url> {

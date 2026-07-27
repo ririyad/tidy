@@ -5,6 +5,8 @@ mod fetch;
 mod highlights;
 mod http;
 mod index;
+mod maintenance;
+mod overrides;
 mod robots;
 mod scheduler;
 mod search;
@@ -19,7 +21,7 @@ pub use discover::{
 pub use error::TidyError;
 pub use extract::{
     ArticleHints, ExtractedArticle, QualityLabel, content_hash, extract_article,
-    render_markdown_html,
+    extract_article_with_overrides, render_markdown_html,
 };
 pub use fetch::{
     ArticleFrontMatter, FetchOptions, FetchProgress, FetchReport, FetchStatus, fetch,
@@ -33,6 +35,8 @@ pub use index::{
     ArticleDetail, ArticleFilter, ArticleListItem, ArticleRecord, FetchRunRow, HighlightRow, Index,
     SourceRecord, SourceRow,
 };
+pub use maintenance::{BackupReport, ReindexReport, backup_vault, reindex_vault};
+pub use overrides::SourceOverrides;
 pub use robots::{RobotsRules, parse_robots};
 pub use scheduler::{
     DEFAULT_INTERVAL_MINUTES, ScheduleStatus, list_due_sources, list_run_history, schedule_status,
@@ -44,7 +48,7 @@ pub use search::{
 };
 pub use settings::{ReaderSettings, load_reader_settings, save_reader_settings};
 pub use state::{ArticleStatePatch, apply_article_state};
-pub use vault::{Vault, VaultError, VaultSummary};
+pub use vault::{Vault, VaultError, VaultSummary, ensure_schema};
 
 pub const APP_NAME: &str = "Tidy";
-pub const VAULT_SCHEMA_VERSION: u32 = 1;
+pub const VAULT_SCHEMA_VERSION: u32 = 2;

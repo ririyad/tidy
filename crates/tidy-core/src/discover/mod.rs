@@ -78,8 +78,20 @@ pub async fn discover(options: DiscoverOptions) -> Result<DiscoverReport> {
     }
 
     // 3. Crawl fallback when we still have nothing under the prefix
+    let mut limits = options.limits.clone();
+    if let Some(max_pages) = options.overrides.max_pages {
+        limits.page_cap = max_pages.max(1);
+    }
     let used_crawl = if found.is_empty() {
-        match crawl::crawl_prefix(&client, &prefix, &options.limits, &mut warnings).await {
+        match crawl::crawl_prefix(
+            &client,
+            &prefix,
+            &limits,
+            options.overrides.pagination_link_selector.as_deref(),
+            &mut warnings,
+        )
+        .await
+        {
             Ok(entries) => {
                 for entry in entries {
                     if !is_prefix_root(&entry.url, &prefix) {

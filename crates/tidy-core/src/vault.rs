@@ -9,6 +9,7 @@ use serde::Serialize;
 use thiserror::Error;
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/0001_initial.sql");
+const MIGRATION_0002: &str = include_str!("../migrations/0002_overrides.sql");
 const DEFAULT_CONFIG: &str = r#"# Tidy vault configuration
 schema_version = 1
 
@@ -20,6 +21,7 @@ line_height = 1.7
 measure = "narrow"
 "#;
 const DEFAULT_SOURCES: &str = "# Tidy sources\nschema_version = 1\nsources = []\n";
+const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Error)]
 pub enum VaultError {
@@ -69,7 +71,7 @@ impl Vault {
 
         let database_path = metadata_dir.join("index.db");
         let connection = Connection::open(&database_path)?;
-        connection.execute_batch(INITIAL_MIGRATION)?;
+        ensure_schema(&connection)?;
 
         Ok(VaultSummary {
             path: root.to_path_buf(),
@@ -121,6 +123,29 @@ fn write_if_missing(path: &Path, contents: &str) -> Result<(), std::io::Error> {
     }
 }
 
+fn apply_migrations(connection: &Connection) -> Result<(), VaultError> {
+    let version: u32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version < 1 {
+        connection.execute_batch(INITIAL_MIGRATION)?;
+    }
+    let version: u32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version < 2 {
+        connection.execute_batch(MIGRATION_0002)?;
+    }
+    let version: u32 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version != SCHEMA_VERSION {
+        return Err(VaultError::Database(rusqlite::Error::InvalidParameterName(
+            format!("unexpected schema version {version}, expected {SCHEMA_VERSION}"),
+        )));
+    }
+    Ok(())
+}
+
+/// Ensure the index schema is at the current revision (idempotent).
+pub fn ensure_schema(connection: &Connection) -> Result<(), VaultError> {
+    apply_migrations(connection)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -147,7 +172,7 @@ mod tests {
         let version: u32 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
 
         let table_count: u32 = connection
             .query_row(

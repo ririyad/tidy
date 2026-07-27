@@ -33,6 +33,7 @@ pub struct SourceRow {
     pub enabled: bool,
     pub article_count: i64,
     pub unread_count: i64,
+    pub overrides: crate::overrides::SourceOverrides,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -89,6 +90,7 @@ pub enum ArticleFilter {
     Starred,
     Archived,
     All,
+    Review,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -155,6 +157,7 @@ impl Index {
     pub fn open(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+        crate::vault::ensure_schema(&conn)?;
         Ok(Self { conn })
     }
 
@@ -201,7 +204,8 @@ impl Index {
                 COALESCE((
                     SELECT count(*) FROM articles a
                     WHERE a.source_id = s.id AND a.state = 'unread' AND a.archived = 0
-                ), 0)
+                ), 0),
+                s.overrides_json
             FROM sources s
             ORDER BY s.title COLLATE NOCASE ASC
             "#,
@@ -226,7 +230,8 @@ impl Index {
                     COALESCE((
                         SELECT count(*) FROM articles a
                         WHERE a.source_id = s.id AND a.state = 'unread' AND a.archived = 0
-                    ), 0)
+                    ), 0),
+                    s.overrides_json
                 FROM sources s
                 WHERE s.id = ?1
                 "#,
@@ -258,6 +263,21 @@ impl Index {
                 "UPDATE sources SET enabled = ?1 WHERE id = ?2",
                 params![enabled as i64, source_id],
             )?;
+        }
+        self.get_source(source_id)
+    }
+
+    pub fn update_source_overrides(
+        &self,
+        source_id: i64,
+        overrides: &crate::overrides::SourceOverrides,
+    ) -> Result<Option<SourceRow>> {
+        let changed = self.conn.execute(
+            "UPDATE sources SET overrides_json = ?1 WHERE id = ?2",
+            params![overrides.to_json(), source_id],
+        )?;
+        if changed == 0 {
+            return Ok(None);
         }
         self.get_source(source_id)
     }
@@ -423,6 +443,9 @@ impl Index {
             ArticleFilter::All => {
                 sql.push_str(" AND a.archived = 0");
             }
+            ArticleFilter::Review => {
+                sql.push_str(" AND a.quality = 'needs_review' AND a.archived = 0");
+            }
         }
 
         if let Some(source_id) = source_id {
@@ -489,6 +512,9 @@ impl Index {
             }
             ArticleFilter::All => {
                 sql.push_str(" AND a.archived = 0");
+            }
+            ArticleFilter::Review => {
+                sql.push_str(" AND a.quality = 'needs_review' AND a.archived = 0");
             }
         }
 
@@ -957,6 +983,7 @@ fn new_smart_view_id(name: &str) -> String {
 }
 
 fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRow> {
+    let overrides_json: String = row.get(10)?;
     Ok(SourceRow {
         id: row.get(0)?,
         url_prefix: row.get(1)?,
@@ -968,6 +995,7 @@ fn map_source_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SourceRow> {
         enabled: row.get::<_, i64>(7)? != 0,
         article_count: row.get(8)?,
         unread_count: row.get(9)?,
+        overrides: crate::overrides::SourceOverrides::from_json(&overrides_json),
     })
 }
 

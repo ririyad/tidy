@@ -10,7 +10,9 @@ use url::Url;
 
 use crate::discover::{CrawlLimits, DiscoverOptions, DiscoveredUrl, discover};
 use crate::error::{Result, TidyError};
-use crate::extract::{ArticleHints, content_hash, extract_article, render_markdown_html};
+use crate::extract::{
+    ArticleHints, content_hash, extract_article_with_overrides, render_markdown_html,
+};
 use crate::http::{HttpClient, HttpClientConfig};
 use crate::index::{ArticleRecord, Index, SourceRecord};
 use crate::vault::Vault;
@@ -130,6 +132,7 @@ where
         limit: options.limit,
         cache_dir: Some(vault.cache_dir()),
         limits: CrawlLimits::default(),
+        overrides: source.overrides.clone(),
     })
     .await?;
 
@@ -181,6 +184,7 @@ where
             &slug,
             item,
             options.download_images,
+            &source.overrides,
         )
         .await
         {
@@ -246,6 +250,7 @@ async fn fetch_one(
     source_slug: &str,
     item: &DiscoveredUrl,
     download_images: bool,
+    overrides: &crate::overrides::SourceOverrides,
 ) -> Result<FetchedArticleSummary> {
     let response = client.get_bytes(&item.url).await?;
     let html = String::from_utf8(response.body).map_err(|error| {
@@ -261,7 +266,7 @@ async fn fetch_one(
         published: item.published.clone(),
         excerpt: None,
     };
-    let extracted = extract_article(&html, &item.url, &hints)?;
+    let extracted = extract_article_with_overrides(&html, &item.url, &hints, overrides)?;
     let stem = article_stem(&extracted.title, &item.url, extracted.published.as_deref());
 
     let markdown = if download_images {

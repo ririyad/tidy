@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::error::{Result, TidyError};
+use crate::overrides::SourceOverrides;
 
 pub use markdown::html_to_markdown;
 pub use metadata::{ArticleHints, merge_metadata};
@@ -60,6 +61,27 @@ pub fn extract_article(
     page_url: &Url,
     hints: &ArticleHints,
 ) -> Result<ExtractedArticle> {
+    extract_article_with_overrides(html, page_url, hints, &SourceOverrides::default())
+}
+
+/// Extract with optional CSS selector overrides for content/title.
+pub fn extract_article_with_overrides(
+    html: &str,
+    page_url: &Url,
+    hints: &ArticleHints,
+    overrides: &SourceOverrides,
+) -> Result<ExtractedArticle> {
+    if let Some(selector) = overrides
+        .content_selector
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        if let Some(extracted) = extract_via_selector(html, page_url, hints, selector, overrides)? {
+            return Ok(extracted);
+        }
+    }
+
     let mut reader = dom_smoothie::Readability::new(html, Some(page_url.as_str()), None)
         .map_err(|error| TidyError::extract(page_url.as_str(), error.to_string()))?;
 
@@ -75,7 +97,14 @@ pub fn extract_article(
     let markdown = html_to_markdown(&content_html)
         .map_err(|error| TidyError::extract(page_url.as_str(), error.to_string()))?;
 
-    let merged = merge_metadata(hints, &meta, &article);
+    let mut merged = merge_metadata(hints, &meta, &article);
+    if let Some(title) = overrides
+        .title_selector
+        .as_deref()
+        .and_then(|selector| select_text(html, selector))
+    {
+        merged.title = title;
+    }
     let word_count = count_words(&text);
     let quality = assess_quality(html, &text, word_count).into();
     let excerpt = merged.excerpt.unwrap_or_else(|| make_excerpt(&text, 200));
@@ -96,6 +125,71 @@ pub fn extract_article(
         site_name: merged.site_name.or(article.site_name),
         image: merged.image.or(article.image),
     })
+}
+
+fn extract_via_selector(
+    html: &str,
+    page_url: &Url,
+    hints: &ArticleHints,
+    selector: &str,
+    overrides: &SourceOverrides,
+) -> Result<Option<ExtractedArticle>> {
+    use scraper::{Html, Selector};
+
+    let document = Html::parse_document(html);
+    let Ok(parsed) = Selector::parse(selector) else {
+        return Ok(None);
+    };
+    let Some(node) = document.select(&parsed).next() else {
+        return Ok(None);
+    };
+    let content_html = node.html();
+    let text = node.text().collect::<Vec<_>>().join(" ");
+    let markdown = html_to_markdown(&content_html)
+        .map_err(|error| TidyError::extract(page_url.as_str(), error.to_string()))?;
+
+    let title = overrides
+        .title_selector
+        .as_deref()
+        .and_then(|value| select_text(html, value))
+        .or_else(|| hints.title.clone())
+        .or_else(|| select_text(html, "title"))
+        .unwrap_or_else(|| "Untitled".into());
+
+    let word_count = count_words(&text);
+    let quality = assess_quality(html, &text, word_count).into();
+    let excerpt = hints
+        .excerpt
+        .clone()
+        .unwrap_or_else(|| make_excerpt(&text, 200));
+
+    Ok(Some(ExtractedArticle {
+        title,
+        author: hints.author.clone(),
+        published: hints.published.clone(),
+        lang: None,
+        excerpt,
+        html: content_html,
+        markdown,
+        text,
+        word_count,
+        reading_time: reading_time_minutes(word_count),
+        quality,
+        canonical_url: Some(page_url.to_string()),
+        site_name: None,
+        image: None,
+    }))
+}
+
+fn select_text(html: &str, selector: &str) -> Option<String> {
+    use scraper::{Html, Selector};
+    let document = Html::parse_document(html);
+    let parsed = Selector::parse(selector).ok()?;
+    document
+        .select(&parsed)
+        .next()
+        .map(|node| node.text().collect::<String>().trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 pub fn count_words(text: &str) -> usize {

@@ -104,6 +104,7 @@ mod tests {
             enabled,
             article_count: 0,
             unread_count: 0,
+            overrides: Default::default(),
         }
     }
 

@@ -46,12 +46,15 @@ impl Default for CrawlLimits {
     }
 }
 
+use crate::overrides::SourceOverrides;
+
 #[derive(Debug, Clone)]
 pub struct DiscoverOptions {
     pub url_prefix: Url,
     pub limit: Option<usize>,
     pub cache_dir: Option<PathBuf>,
     pub limits: CrawlLimits,
+    pub overrides: SourceOverrides,
 }
 
 #[derive(Debug, Clone, Serialize)]
