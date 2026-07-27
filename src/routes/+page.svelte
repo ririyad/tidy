@@ -13,7 +13,9 @@
     FetchProgress,
     FetchRunRow,
     ReaderSettings,
+    SmartViewRow,
     SourceRow,
+    TagCount,
     VaultSummary
   } from '$lib/types';
 
@@ -26,6 +28,12 @@
   let selectedSourceId = $state<number | null>(null);
   let article = $state<ArticleDetail | null>(null);
   let filter = $state<FeedFilter>('inbox');
+  let searchQuery = $state('');
+  let selectedTag = $state<string | null>(null);
+  let activeSmartViewId = $state<string | null>(null);
+  let tags = $state<TagCount[]>([]);
+  let smartViews = $state<SmartViewRow[]>([]);
+  let searchInput = $state<HTMLInputElement | null>(null);
   let settings = $state<ReaderSettings>({
     theme: 'paper',
     font: 'serif',
@@ -41,6 +49,7 @@
   let progressTimer: ReturnType<typeof setTimeout> | null = null;
   let stateTimer: ReturnType<typeof setTimeout> | null = null;
   let scheduleTimer: ReturnType<typeof setInterval> | null = null;
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   onMount(() => {
     let unlisten: (() => void) | undefined;
@@ -74,10 +83,20 @@
   async function bootstrapVault() {
     sources = await api.listSources();
     settings = await api.getReaderSettings();
+    tags = await api.listTags();
+    smartViews = await api.listSmartViews();
     await reloadArticles();
     await reloadFetchRuns();
     startScheduleTicker();
     void catchUp();
+  }
+
+  async function reloadTags() {
+    tags = await api.listTags();
+  }
+
+  async function reloadSmartViews() {
+    smartViews = await api.listSmartViews();
   }
 
   function startScheduleTicker() {
@@ -104,6 +123,7 @@
       await api.catchUpDueSources();
       sources = await api.listSources();
       await reloadArticles();
+      await reloadTags();
       await reloadFetchRuns();
     } catch (cause) {
       if (!options?.quiet) {
@@ -116,7 +136,12 @@
   }
 
   async function reloadArticles() {
-    articles = await api.listArticles(filter, selectedSourceId);
+    articles = await api.queryArticles({
+      filter,
+      source_id: selectedSourceId,
+      tag: selectedTag,
+      search: searchQuery.trim() || null
+    });
     if (selectedId && !articles.some((item) => item.id === selectedId)) {
       selectedId = articles[0]?.id ?? null;
     }
@@ -125,6 +150,55 @@
     } else {
       article = null;
     }
+  }
+
+  function scheduleSearchReload(value: string) {
+    searchQuery = value;
+    activeSmartViewId = null;
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      void reloadArticles();
+    }, 220);
+  }
+
+  function clearQueryContext() {
+    activeSmartViewId = null;
+  }
+
+  async function saveSmartView() {
+    const name = window.prompt('Save smart view as…');
+    if (!name?.trim()) return;
+    const saved = await api.saveSmartView({
+      name: name.trim(),
+      query: {
+        filter,
+        tag: selectedTag,
+        query: searchQuery.trim() || null,
+        source_id: selectedSourceId
+      }
+    });
+    smartViews = await api.listSmartViews();
+    activeSmartViewId = saved.id;
+  }
+
+  async function deleteSmartView(id: string) {
+    await api.deleteSmartView(id);
+    if (activeSmartViewId === id) activeSmartViewId = null;
+    smartViews = await api.listSmartViews();
+  }
+
+  function applySmartView(view: SmartViewRow | null) {
+    if (!view) {
+      activeSmartViewId = null;
+      return;
+    }
+    activeSmartViewId = view.id;
+    filter = view.query.filter ?? 'inbox';
+    selectedTag = view.query.tag ?? null;
+    searchQuery = view.query.query ?? '';
+    selectedSourceId = view.query.source_id ?? null;
+    void reloadArticles();
+    void reloadFetchRuns();
   }
 
   async function openArticle(id: number) {
@@ -202,6 +276,7 @@
       }
       sources = await api.listSources();
       await reloadArticles();
+      await reloadTags();
       await reloadFetchRuns();
     } catch (cause) {
       error = cause instanceof Error ? cause.message : String(cause);
@@ -250,10 +325,16 @@
         event.preventDefault();
         filter = 'inbox';
         selectedSourceId = null;
+        selectedTag = null;
+        searchQuery = '';
+        clearQueryContext();
         void reloadArticles();
       } else if (event.key === 'r') {
         event.preventDefault();
         filter = 'starred';
+        selectedTag = null;
+        searchQuery = '';
+        clearQueryContext();
         void reloadArticles();
       }
       return;
@@ -293,7 +374,7 @@
         break;
       case '/':
         event.preventDefault();
-        showAdd = true;
+        searchInput?.focus();
         break;
     }
   }
@@ -374,17 +455,31 @@
       {sources}
       {filter}
       {selectedSourceId}
+      {selectedTag}
+      {activeSmartViewId}
+      {tags}
+      {smartViews}
       {fetching}
       {fetchRuns}
       onFilter={(next: FeedFilter) => {
         filter = next;
+        clearQueryContext();
         void reloadArticles();
       }}
       onSelectSource={(id: number | null) => {
         selectedSourceId = id;
+        clearQueryContext();
         void reloadArticles();
         void reloadFetchRuns();
       }}
+      onSelectTag={(tag: string | null) => {
+        selectedTag = tag;
+        clearQueryContext();
+        void reloadArticles();
+      }}
+      onSelectSmartView={applySmartView}
+      onSaveSmartView={() => void saveSmartView()}
+      onDeleteSmartView={(id: string) => void deleteSmartView(id)}
       onAddSource={() => (showAdd = true)}
       onRefresh={refresh}
       onRemoveSource={removeSource}
@@ -396,7 +491,10 @@
       {articles}
       {selectedId}
       {progressMessage}
+      {searchQuery}
+      bind:searchInput
       onSelect={openArticle}
+      onSearchChange={scheduleSearchReload}
     />
     <Reader
       {article}

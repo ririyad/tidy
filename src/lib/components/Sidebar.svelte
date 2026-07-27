@@ -1,15 +1,23 @@
 <script lang="ts">
   import { formatInterval, formatRelative } from '../format';
-  import type { FeedFilter, FetchRunRow, SourceRow } from '../types';
+  import type { FeedFilter, FetchRunRow, SmartViewRow, SourceRow, TagCount } from '../types';
 
   let {
     sources,
     filter,
     selectedSourceId,
+    selectedTag,
+    activeSmartViewId,
+    tags,
+    smartViews,
     fetching,
     fetchRuns,
     onFilter,
     onSelectSource,
+    onSelectTag,
+    onSelectSmartView,
+    onSaveSmartView,
+    onDeleteSmartView,
     onAddSource,
     onRefresh,
     onRemoveSource,
@@ -20,10 +28,18 @@
     sources: SourceRow[];
     filter: FeedFilter;
     selectedSourceId: number | null;
+    selectedTag: string | null;
+    activeSmartViewId: string | null;
+    tags: TagCount[];
+    smartViews: SmartViewRow[];
     fetching: boolean;
     fetchRuns: FetchRunRow[];
     onFilter: (filter: FeedFilter) => void;
     onSelectSource: (id: number | null) => void;
+    onSelectTag: (tag: string | null) => void;
+    onSelectSmartView: (view: SmartViewRow | null) => void;
+    onSaveSmartView: () => void;
+    onDeleteSmartView: (id: string) => void;
     onAddSource: () => void;
     onRefresh: () => void;
     onRemoveSource: (id: number) => void;
@@ -77,6 +93,70 @@
       </button>
     {/each}
   </nav>
+
+  <div class="mb-4">
+    <div class="mb-2 flex items-center justify-between">
+      <p class="text-xs font-semibold tracking-[0.14em] text-[var(--ink-soft)] uppercase">
+        Smart views
+      </p>
+      <button
+        class="rounded-lg px-2 py-1 text-xs font-semibold text-[var(--accent)] hover:bg-[var(--accent-soft)]"
+        onclick={onSaveSmartView}
+      >
+        Save
+      </button>
+    </div>
+    {#if smartViews.length === 0}
+      <p class="px-2 text-xs leading-5 text-[var(--ink-soft)]">
+        Save the current filter, tag, or search as a view.
+      </p>
+    {:else}
+      <div class="space-y-1">
+        {#each smartViews as view}
+          <div class="group flex items-center gap-1">
+            <button
+              class="min-w-0 flex-1 truncate rounded-xl px-3 py-2 text-left text-sm transition
+                {activeSmartViewId === view.id
+                ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+                : 'text-[var(--ink-soft)] hover:bg-white/60'}"
+              onclick={() => onSelectSmartView(view)}
+            >
+              {view.name}
+            </button>
+            <button
+              class="rounded-lg px-2 py-1 text-xs text-[var(--ink-soft)] opacity-0 transition group-hover:opacity-100 hover:bg-white/60"
+              aria-label="Delete smart view"
+              onclick={() => onDeleteSmartView(view.id)}
+            >
+              ×
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  {#if tags.length > 0}
+    <div class="mb-4">
+      <p class="mb-2 text-xs font-semibold tracking-[0.14em] text-[var(--ink-soft)] uppercase">
+        Tags
+      </p>
+      <div class="flex flex-wrap gap-1.5 px-1">
+        {#each tags as item}
+          <button
+            class="rounded-full px-2.5 py-1 text-xs transition
+              {selectedTag === item.tag
+              ? 'bg-[var(--accent-soft)] text-[var(--accent)]'
+              : 'bg-white/70 text-[var(--ink-soft)] hover:bg-white'}"
+            onclick={() => onSelectTag(selectedTag === item.tag ? null : item.tag)}
+          >
+            {item.tag}
+            <span class="ml-1 opacity-70">{item.count}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <div class="mb-3 flex items-center justify-between">
     <p class="text-xs font-semibold tracking-[0.14em] text-[var(--ink-soft)] uppercase">Sources</p>

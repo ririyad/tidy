@@ -87,6 +87,33 @@ export type FetchProgress = {
 
 export type FeedFilter = 'inbox' | 'unread' | 'starred' | 'archived' | 'all';
 
+export type TagCount = {
+  tag: string;
+  count: number;
+};
+
+export type SmartViewQuery = {
+  filter: FeedFilter;
+  tag?: string | null;
+  query?: string | null;
+  source_id?: number | null;
+};
+
+export type SmartViewRow = {
+  id: string;
+  name: string;
+  query: SmartViewQuery;
+  position: number;
+};
+
+export type ArticleQuery = {
+  filter: FeedFilter;
+  source_id?: number | null;
+  tag?: string | null;
+  search?: string | null;
+  limit?: number | null;
+};
+
 export type DayGroup = {
   label: string;
   key: string;

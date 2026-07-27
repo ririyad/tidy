@@ -6,12 +6,18 @@
     articles,
     selectedId,
     progressMessage,
-    onSelect
+    searchQuery,
+    searchInput = $bindable(null),
+    onSelect,
+    onSearchChange
   }: {
     articles: ArticleListItem[];
     selectedId: number | null;
     progressMessage: string;
+    searchQuery: string;
+    searchInput?: HTMLInputElement | null;
     onSelect: (id: number) => void;
+    onSearchChange: (value: string) => void;
   } = $props();
 
   const groups = $derived(groupByDay(articles));
@@ -20,7 +26,17 @@
 <section class="panel flex h-full flex-col">
   <header class="border-b border-[var(--line)] px-5 py-4">
     <p class="text-xs font-semibold tracking-[0.14em] text-[var(--ink-soft)] uppercase">Feed</p>
-    <p class="mt-1 text-sm text-[var(--ink-soft)]">
+    <label class="mt-3 block">
+      <span class="sr-only">Search articles</span>
+      <input
+        bind:this={searchInput}
+        class="w-full rounded-xl border border-[var(--line)] bg-white/80 px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+        placeholder="Search title, excerpt, body…"
+        value={searchQuery}
+        oninput={(event) => onSearchChange((event.currentTarget as HTMLInputElement).value)}
+      />
+    </label>
+    <p class="mt-2 text-sm text-[var(--ink-soft)]">
       {articles.length} articles
       {#if progressMessage}
         <span class="text-[var(--accent)]"> · {progressMessage}</span>
@@ -31,7 +47,7 @@
   <div class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
     {#if articles.length === 0}
       <div class="px-4 py-10 text-sm leading-7 text-[var(--ink-soft)]">
-        Nothing here yet. Add a source or switch filters.
+        Nothing here yet. Add a source, try another filter, or adjust your search.
       </div>
     {:else}
       {#each groups as group}

@@ -2,11 +2,15 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   ArticleDetail,
   ArticleListItem,
+  ArticleQuery,
   FeedFilter,
   FetchRunRow,
   ReaderSettings,
   ScheduleStatus,
+  SmartViewQuery,
+  SmartViewRow,
   SourceRow,
+  TagCount,
   VaultSummary
 } from './types';
 
@@ -46,9 +50,27 @@ export const api = {
       request: {
         filter,
         source_id: sourceId ?? null,
-        limit: null
+        limit: null,
+        search: null,
+        tag: null
       }
     }),
+  queryArticles: (query: ArticleQuery) =>
+    invoke<ArticleListItem[]>('list_articles', {
+      request: {
+        filter: query.filter,
+        source_id: query.source_id ?? null,
+        limit: query.limit ?? null,
+        search: query.search ?? null,
+        tag: query.tag ?? null
+      }
+    }),
+  listTags: (prefix?: string | null, limit = 50) =>
+    invoke<TagCount[]>('list_tags', { prefix: prefix ?? null, limit }),
+  listSmartViews: () => invoke<SmartViewRow[]>('list_smart_views'),
+  saveSmartView: (payload: { id?: string; name: string; query: SmartViewQuery }) =>
+    invoke<SmartViewRow>('save_smart_view', { request: payload }),
+  deleteSmartView: (id: string) => invoke<boolean>('delete_smart_view', { id }),
   getArticle: (id: number) => invoke<ArticleDetail | null>('get_article', { id }),
   setArticleState: (payload: {
     id: number;
