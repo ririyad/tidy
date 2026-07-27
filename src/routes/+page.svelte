@@ -45,7 +45,7 @@
   });
   let showAdd = $state(false);
   let onboardingStep = $state<'welcome' | 'help' | null>(null);
-  let appVersion = $state('0.5.1');
+  let appVersion = $state('0.5.2');
   let fetching = $state(false);
   let progressMessage = $state('');
   let fetchRuns = $state<FetchRunRow[]>([]);
@@ -153,12 +153,32 @@
       await reloadTags();
       await reloadFetchRuns();
     } catch (cause) {
-      if (!options?.quiet) {
-        error = cause instanceof Error ? cause.message : String(cause);
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (message.toLowerCase().includes('cancelled')) {
+        progressMessage = 'Fetch stopped';
+        sources = await api.listSources();
+        await reloadArticles();
+      } else if (!options?.quiet) {
+        error = message;
       }
     } finally {
       fetching = false;
-      progressMessage = '';
+      if (!progressMessage.toLowerCase().includes('stopped')) {
+        progressMessage = '';
+      } else {
+        setTimeout(() => {
+          progressMessage = '';
+        }, 2000);
+      }
+    }
+  }
+
+  async function stopFetch() {
+    progressMessage = 'Stopping…';
+    try {
+      await api.cancelFetch();
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
     }
   }
 
@@ -283,10 +303,23 @@
       await reloadArticles();
       await reloadFetchRuns();
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (message.toLowerCase().includes('cancelled')) {
+        showAdd = false;
+        progressMessage = 'Fetch stopped';
+        sources = await api.listSources();
+        await reloadArticles();
+        setTimeout(() => {
+          progressMessage = '';
+        }, 2000);
+      } else {
+        error = message;
+      }
     } finally {
       fetching = false;
-      progressMessage = '';
+      if (!progressMessage.toLowerCase().includes('stopped')) {
+        progressMessage = '';
+      }
     }
   }
 
@@ -297,8 +330,9 @@
       if (selectedSourceId) {
         await api.refreshSource(selectedSourceId);
       } else {
-        for (const source of sources.filter((item) => item.enabled)) {
-          await api.refreshSource(source.id);
+        const enabled = sources.filter((item) => item.enabled);
+        for (const [index, source] of enabled.entries()) {
+          await api.refreshSource(source.id, undefined, index === 0);
         }
       }
       sources = await api.listSources();
@@ -306,10 +340,22 @@
       await reloadTags();
       await reloadFetchRuns();
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      const message = cause instanceof Error ? cause.message : String(cause);
+      if (message.toLowerCase().includes('cancelled')) {
+        progressMessage = 'Fetch stopped';
+        sources = await api.listSources();
+        await reloadArticles();
+        setTimeout(() => {
+          progressMessage = '';
+        }, 2000);
+      } else {
+        error = message;
+      }
     } finally {
       fetching = false;
-      progressMessage = '';
+      if (!progressMessage.toLowerCase().includes('stopped')) {
+        progressMessage = '';
+      }
     }
   }
 
@@ -568,10 +614,12 @@
       {articles}
       {selectedId}
       {progressMessage}
+      {fetching}
       {searchQuery}
       bind:searchInput
       onSelect={openArticle}
       onSearchChange={scheduleSearchReload}
+      onStopFetch={() => void stopFetch()}
     />
     <Reader
       {article}

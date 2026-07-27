@@ -95,7 +95,7 @@
   });
 </script>
 
-<aside class="panel flex h-full flex-col px-4 py-5">
+<aside class="panel flex h-full min-h-0 flex-col overflow-hidden px-4 py-5">
   <div class="mb-6 flex items-center gap-3">
     <div class="grid size-9 place-items-center rounded-full bg-[var(--ink)] text-[var(--paper)]">
       <span class="text-sm font-semibold">T</span>
@@ -197,7 +197,7 @@
     </button>
   </div>
 
-  <div class="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
+  <div class="min-h-0 flex-1 space-y-1 overflow-x-hidden overflow-y-auto overscroll-contain pr-1">
     {#if sources.length === 0}
       <p class="px-2 text-sm leading-6 text-[var(--ink-soft)]">
         Add a blog URL prefix to begin gathering posts.

@@ -3,6 +3,8 @@ mod slug;
 mod writer;
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use chrono::Utc;
 use serde::Serialize;
@@ -80,17 +82,26 @@ pub struct FetchProgress {
 
 /// Discover posts under a prefix, extract them, write markdown, and index them.
 pub async fn fetch(options: FetchOptions) -> Result<FetchReport> {
-    fetch_with_progress(options, |_| {}).await
+    fetch_with_progress(options, |_| {}, None).await
 }
 
 /// Same as [`fetch`], with a progress callback for UI updates.
+///
+/// Pass `cancel` to cooperatively stop between articles (checked each loop).
 pub async fn fetch_with_progress<F>(
     mut options: FetchOptions,
     mut on_progress: F,
+    cancel: Option<Arc<AtomicBool>>,
 ) -> Result<FetchReport>
 where
     F: FnMut(FetchProgress),
 {
+    let cancelled = || {
+        cancel
+            .as_ref()
+            .is_some_and(|flag| flag.load(Ordering::SeqCst))
+    };
+
     let summary = Vault::initialize(&options.vault)?;
     let vault = Vault::open(&summary.path)?;
     let mut index = Index::open(vault.database_path())?;
@@ -112,6 +123,10 @@ where
         backfill_policy: backfill,
         enabled: true,
     })?;
+
+    if cancelled() {
+        return Err(TidyError::Cancelled);
+    }
 
     on_progress(FetchProgress {
         source_id: source.id,
@@ -135,6 +150,10 @@ where
         overrides: source.overrides.clone(),
     })
     .await?;
+
+    if cancelled() {
+        return Err(TidyError::Cancelled);
+    }
 
     if let Some(feed) = &discovery.feed_url {
         index.set_source_feed_url(source.id, feed.as_str())?;
@@ -166,6 +185,31 @@ where
     });
 
     for (idx, item) in discovery.urls.iter().enumerate() {
+        if cancelled() {
+            index.finish_fetch_run(
+                run_id,
+                "cancelled",
+                report.discovered as i64,
+                report.added as i64,
+                report.updated as i64,
+                report.skipped as i64,
+                report.failed as i64,
+            )?;
+            on_progress(FetchProgress {
+                source_id: source.id,
+                phase: "cancelled".into(),
+                current: idx,
+                total,
+                url: None,
+                title: None,
+                message: format!(
+                    "Stopped — added {}, updated {}, skipped {}",
+                    report.added, report.updated, report.skipped
+                ),
+            });
+            return Err(TidyError::Cancelled);
+        }
+
         on_progress(FetchProgress {
             source_id: source.id,
             phase: "extract".into(),

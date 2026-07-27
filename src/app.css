@@ -28,7 +28,8 @@
 html,
 body {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -67,8 +68,23 @@ select:focus-visible {
 .app-shell {
   display: grid;
   grid-template-columns: 15rem 22rem minmax(0, 1fr);
-  height: 100vh;
+  height: 100%;
+  max-height: 100%;
   overflow: hidden;
+}
+
+.app-shell > * {
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed-scroll {
+  -webkit-overflow-scrolling: touch;
 }
 
 .panel {
@@ -169,11 +185,6 @@ select:focus-visible {
   background: rgb(180 120 60 / 28%);
 }
 
-.feed-item {
-  content-visibility: auto;
-  contain-intrinsic-size: 0 5.5rem;
-}
-
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 13rem 18rem minmax(0, 1fr);
@@ -183,9 +194,13 @@ select:focus-visible {
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: minmax(12rem, 30vh) minmax(12rem, 30vh) minmax(0, 1fr);
+    height: 100%;
+  }
+
+  .app-shell > * {
     height: auto;
-    min-height: 100vh;
+    max-height: 100%;
   }
 
   .panel {

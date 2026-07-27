@@ -2,6 +2,17 @@
 
 All notable changes to Tidy are documented here.
 
+## [0.5.2] — 2026-07-27
+
+### Added
+
+- Stop button to cancel an in-progress fetch (cooperative cancel between articles)
+
+### Fixed
+
+- Feed, sidebar, and reader panes scroll correctly inside the app shell
+- Long fetch progress URLs no longer collapse the feed list height
+
 ## [0.5.1] — 2026-07-27
 
 ### Fixed
@@ -76,6 +87,9 @@ First tagged release. Milestones **M0–M3** are in place: vault + fetch engine 
 - Live fetch progress events and keyboard navigation
 - CI and release packaging for **macOS Apple Silicon** (`aarch64-apple-darwin`)
 
+[0.5.2]: https://github.com/ririyad/tidy/releases/tag/v0.5.2
+[0.5.1]: https://github.com/ririyad/tidy/releases/tag/v0.5.1
+[0.5.0]: https://github.com/ririyad/tidy/releases/tag/v0.5.0
 [0.2.1]: https://github.com/ririyad/tidy/releases/tag/v0.2.1
 [0.2.0]: https://github.com/ririyad/tidy/releases/tag/v0.2.0
 [0.1.1]: https://github.com/ririyad/tidy/releases/tag/v0.1.1

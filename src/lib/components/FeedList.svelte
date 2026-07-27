@@ -6,25 +6,29 @@
     articles,
     selectedId,
     progressMessage,
+    fetching,
     searchQuery,
     searchInput = $bindable(null),
     onSelect,
-    onSearchChange
+    onSearchChange,
+    onStopFetch
   }: {
     articles: ArticleListItem[];
     selectedId: number | null;
     progressMessage: string;
+    fetching: boolean;
     searchQuery: string;
     searchInput?: HTMLInputElement | null;
     onSelect: (id: number) => void;
     onSearchChange: (value: string) => void;
+    onStopFetch: () => void;
   } = $props();
 
   const groups = $derived(groupByDay(articles));
 </script>
 
-<section class="panel flex h-full flex-col">
-  <header class="border-b border-[var(--line)] px-5 py-4">
+<section class="panel flex h-full min-h-0 flex-col overflow-hidden">
+  <header class="shrink-0 border-b border-[var(--line)] px-5 py-4">
     <p class="text-xs font-semibold tracking-[0.14em] text-[var(--ink-soft)] uppercase">Feed</p>
     <label class="mt-3 block">
       <span class="sr-only">Search articles</span>
@@ -36,15 +40,29 @@
         oninput={(event) => onSearchChange((event.currentTarget as HTMLInputElement).value)}
       />
     </label>
-    <p class="mt-2 text-sm text-[var(--ink-soft)]">
-      {articles.length} articles
-      {#if progressMessage}
-        <span class="text-[var(--accent)]"> · {progressMessage}</span>
+    <div class="mt-2 flex items-start justify-between gap-3">
+      <p class="min-w-0 flex-1 break-words text-sm text-[var(--ink-soft)]">
+        {articles.length} articles
+        {#if progressMessage}
+          <span class="text-[var(--accent)]"> · {progressMessage}</span>
+        {:else if fetching}
+          <span class="text-[var(--accent)]"> · Fetching…</span>
+        {/if}
+      </p>
+      {#if fetching}
+        <button
+          class="shrink-0 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)]"
+          onclick={onStopFetch}
+        >
+          Stop
+        </button>
       {/if}
-    </p>
+    </div>
   </header>
 
-  <div class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+  <div
+    class="feed-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2 py-3"
+  >
     {#if articles.length === 0}
       <div class="px-4 py-10 text-sm leading-7 text-[var(--ink-soft)]">
         {#if searchQuery.trim()}

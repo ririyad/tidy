@@ -1,4 +1,11 @@
-use std::{fs, path::PathBuf, sync::Mutex};
+use std::{
+    fs,
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
 use serde::Serialize;
 use tauri::{Emitter, Manager, State};
@@ -13,9 +20,31 @@ use tidy_core::{
 };
 use url::Url;
 
-#[derive(Default)]
 struct AppState {
     vault_path: Mutex<Option<PathBuf>>,
+    fetch_cancel: Arc<AtomicBool>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            vault_path: Mutex::new(None),
+            fetch_cancel: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
+
+fn begin_fetch(state: &AppState) -> Arc<AtomicBool> {
+    state.fetch_cancel.store(false, Ordering::SeqCst);
+    Arc::clone(&state.fetch_cancel)
+}
+
+fn fetch_cancel_flag(state: &AppState) -> Arc<AtomicBool> {
+    Arc::clone(&state.fetch_cancel)
+}
+
+fn is_cancelled_error(message: &str) -> bool {
+    message.to_ascii_lowercase().contains("cancelled")
 }
 
 fn with_vault<T>(
@@ -84,10 +113,11 @@ async fn open_vault_path(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<VaultSummary, String> {
-    let summary = tauri::async_runtime::spawn_blocking(move || Vault::initialize(PathBuf::from(path)))
-        .await
-        .map_err(|error| error.to_string())?
-        .map_err(|e| e.to_string())?;
+    let summary =
+        tauri::async_runtime::spawn_blocking(move || Vault::initialize(PathBuf::from(path)))
+            .await
+            .map_err(|error| error.to_string())?
+            .map_err(|e| e.to_string())?;
     *state.vault_path.lock().map_err(|e| e.to_string())? = Some(summary.path.clone());
     remember_vault(&app, &summary.path)?;
     Ok(summary)
@@ -150,6 +180,7 @@ async fn add_source(
         .filter(|t| !t.trim().is_empty())
         .unwrap_or_else(|| source_slug(&prefix));
 
+    let cancel = begin_fetch(&state);
     let app_handle = app.clone();
     let report = fetch_with_progress(
         FetchOptions {
@@ -164,6 +195,7 @@ async fn add_source(
         move |progress: FetchProgress| {
             let _ = app_handle.emit("fetch-progress", &progress);
         },
+        Some(cancel),
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -177,8 +209,19 @@ async fn refresh_source(
     state: State<'_, AppState>,
     source_id: i64,
     limit: Option<usize>,
+    clear_cancel: Option<bool>,
 ) -> Result<FetchReport, String> {
-    let (vault_path, prefix, title, backfill) = with_vault(&state, |vault, index| {
+    refresh_source_inner(app, &state, source_id, limit, clear_cancel.unwrap_or(true)).await
+}
+
+async fn refresh_source_inner(
+    app: tauri::AppHandle,
+    state: &AppState,
+    source_id: i64,
+    limit: Option<usize>,
+    clear_cancel: bool,
+) -> Result<FetchReport, String> {
+    let (vault_path, prefix, title, backfill) = with_vault(state, |vault, index| {
         let source = index
             .get_source(source_id)
             .map_err(|e| e.to_string())?
@@ -197,6 +240,11 @@ async fn refresh_source(
 
     let limit = limit.or_else(|| if backfill == "full" { None } else { Some(20) });
 
+    let cancel = if clear_cancel {
+        begin_fetch(state)
+    } else {
+        fetch_cancel_flag(state)
+    };
     let app_handle = app.clone();
     fetch_with_progress(
         FetchOptions {
@@ -211,6 +259,7 @@ async fn refresh_source(
         move |progress: FetchProgress| {
             let _ = app_handle.emit("fetch-progress", &progress);
         },
+        Some(cancel),
     )
     .await
     .map_err(|e| e.to_string())
@@ -266,12 +315,27 @@ async fn catch_up_due_sources(
         find_due_sources(index).map_err(|e| e.to_string())
     })?;
 
+    // One cancel flag for the whole catch-up batch.
+    state.fetch_cancel.store(false, Ordering::SeqCst);
+
     let mut reports = Vec::new();
     for source in due {
-        let report = refresh_source(app.clone(), state.clone(), source.id, None).await?;
-        reports.push(report);
+        if state.fetch_cancel.load(Ordering::SeqCst) {
+            break;
+        }
+        match refresh_source_inner(app.clone(), &state, source.id, None, false).await {
+            Ok(report) => reports.push(report),
+            Err(error) if is_cancelled_error(&error) => break,
+            Err(error) => return Err(error),
+        }
     }
     Ok(reports)
+}
+
+#[tauri::command]
+fn cancel_fetch(state: State<'_, AppState>) -> Result<(), String> {
+    state.fetch_cancel.store(true, Ordering::SeqCst);
+    Ok(())
 }
 
 #[tauri::command]
@@ -523,7 +587,9 @@ async fn backup_open_vault(
 
     tauri::async_runtime::spawn_blocking(move || {
         let vault = Vault::open(&vault_path).map_err(|e| e.to_string())?;
-        backup_vault(&vault, parent).map(Some).map_err(|e| e.to_string())
+        backup_vault(&vault, parent)
+            .map(Some)
+            .map_err(|e| e.to_string())
     })
     .await
     .map_err(|error| error.to_string())?
@@ -554,9 +620,7 @@ fn get_app_info() -> AppInfo {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(AppState {
-            vault_path: Mutex::new(None),
-        })
+        .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             select_vault,
             open_vault_path,
@@ -572,6 +636,7 @@ pub fn run() {
             get_schedule_status,
             list_fetch_runs,
             catch_up_due_sources,
+            cancel_fetch,
             list_articles,
             list_tags,
             list_smart_views,

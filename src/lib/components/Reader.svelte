@@ -97,7 +97,7 @@
 </script>
 
 <section
-  class="reader-theme-{settings.theme} relative flex h-full min-w-0 flex-col"
+  class="reader-theme-{settings.theme} relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden"
   style="background: var(--reader-bg); color: var(--reader-fg);"
 >
   {#if !article}
@@ -190,7 +190,11 @@
       </div>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto px-6 py-8" bind:this={scroller} onscroll={onScroll}>
+    <div
+      class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-6 py-8"
+      bind:this={scroller}
+      onscroll={onScroll}
+    >
       <article
         class="reader-font-{settings.font} reader-measure-{settings.measure} mx-auto"
         style="font-size: {settings.font_size}px; line-height: {settings.line_height};"

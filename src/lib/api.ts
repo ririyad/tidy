@@ -31,8 +31,8 @@ export const api = {
     recent_limit?: number;
     interval_minutes?: number;
   }) => invoke('add_source', { request: payload }),
-  refreshSource: (sourceId: number, limit?: number) =>
-    invoke('refresh_source', { sourceId, limit }),
+  refreshSource: (sourceId: number, limit?: number, clearCancel = true) =>
+    invoke('refresh_source', { sourceId, limit, clearCancel }),
   removeSource: (sourceId: number) => invoke<boolean>('remove_source', { sourceId }),
   updateSourceSchedule: (payload: {
     sourceId: number;
@@ -57,6 +57,7 @@ export const api = {
       limit
     }),
   catchUpDueSources: () => invoke('catch_up_due_sources'),
+  cancelFetch: () => invoke('cancel_fetch'),
   listArticles: (filter: FeedFilter, sourceId?: number | null) =>
     invoke<ArticleListItem[]>('list_articles', {
       request: {
